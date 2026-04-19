@@ -16,6 +16,7 @@ export default function Admin() {
     adminListLeadCampaigns, adminUpsertLeadCampaign,
     adminToggleLeadCampaign, adminDeleteLeadCampaign,
     adminListFixtures, adminUpsertFixture, adminDeleteFixture,
+    bootstrapAdmin,
   } = useApp();
 
   const [msg, setMsg] = useState(null);
@@ -57,12 +58,9 @@ export default function Admin() {
 
   if (!isAdmin) {
     return (
-      <Screen title="Admin" subtitle="Area riservata">
-        <div style={{ padding: '0 22px', color: '#FF5A6A' }}>
-          Il tuo account non ha il flag <code>is_admin</code>. Esegui su Supabase:
-          <pre style={code}>
-            update public.profiles set is_admin = true where id = auth.uid();
-          </pre>
+      <Screen title="Admin" subtitle="Sblocca con passphrase master">
+        <div style={{ padding: '0 22px 30px' }}>
+          <BootstrapAdminForm bootstrap={bootstrapAdmin} />
         </div>
       </Screen>
     );
@@ -661,6 +659,58 @@ function FixtureForm({ initial, onSave, onCancel, busy }) {
           {busy ? 'Salvo…' : 'Salva partita'}
         </button>
       </div>
+    </form>
+  );
+}
+
+function BootstrapAdminForm({ bootstrap }) {
+  const [secret, setSecret] = useState('');
+  const [msg, setMsg] = useState(null);
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setMsg(null); setErr(null); setBusy(true);
+    try {
+      await bootstrap(secret);
+      setMsg('Accesso admin sbloccato. Ricarica la pagina.');
+      setSecret('');
+    } catch (e) {
+      setErr(e?.message || 'Passphrase errata.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} style={formGrid}>
+      <div style={{ gridColumn: '1 / -1', color: 'rgba(245,246,250,0.7)', fontSize: 13, lineHeight: 1.5 }}>
+        Il tuo account è loggato ma non ha il flag admin. Inserisci qui la
+        passphrase master definita nella funzione SQL <code>bootstrap_admin</code>
+        — l'account corrente verrà promosso ad admin una volta sola.
+      </div>
+      {msg && (
+        <div style={{ gridColumn: '1 / -1', color: '#3DDC97', fontSize: 13 }}>{msg}</div>
+      )}
+      {err && (
+        <div style={{ gridColumn: '1 / -1', color: '#FF5A6A', fontSize: 13 }}>{err}</div>
+      )}
+      <div style={{ gridColumn: '1 / -1' }}>
+        <Field label="Passphrase master">
+          <input
+            type="password"
+            value={secret}
+            onChange={(e) => setSecret(e.target.value)}
+            autoComplete="off"
+            required
+            style={input}
+          />
+        </Field>
+      </div>
+      <button type="submit" disabled={busy || !secret} style={submitBtn}>
+        {busy ? 'Verifico…' : 'Sblocca admin'}
+      </button>
     </form>
   );
 }

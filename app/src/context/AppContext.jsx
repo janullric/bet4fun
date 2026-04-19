@@ -307,6 +307,16 @@ export function AppProvider({ children }) {
     if (error) throw error;
   }, []);
 
+  // Promuove l'utente corrente ad admin usando la passphrase master
+  // definita nella funzione SQL public.bootstrap_admin.
+  const bootstrapAdmin = useCallback(async (secret) => {
+    if (!supabase) throw new Error('Supabase non configurato');
+    const { error } = await supabase.rpc('bootstrap_admin', { p_secret: secret });
+    if (error) throw error;
+    await refreshProfile();
+    return true;
+  }, [refreshProfile]);
+
   const countRoundEntrants = useCallback(async (leagueId, round) => {
     if (!supabase) return 0;
     const { data, error } = await supabase.rpc('count_round_entrants', {
@@ -396,6 +406,7 @@ export function AppProvider({ children }) {
     adminUpsertFixture,
     adminDeleteFixture,
     countRoundEntrants,
+    bootstrapAdmin,
   };
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
