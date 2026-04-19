@@ -65,7 +65,13 @@
       "Bash(curl -sf -w \"\\\\nHTTP %{http_code}\\\\n\" \"https://www.thesportsdb.com/api/v1/json/3/eventsround.php?id=4370&r=4&s=2026\")",
       "Bash(textutil -convert txt -stdout \"/Users/macippro/Desktop/Bet4Fun/Sport4Fun Regolamento/Regolamento in Italiano.docx\")",
       "Bash(npx vite *)",
-      "Bash(curl -s \"http://localhost:5173/pronostici\" -o /dev/null -w \"HTTP %{http_code}\\\\n\")"
+      "Bash(curl -s \"http://localhost:5173/pronostici\" -o /dev/null -w \"HTTP %{http_code}\\\\n\")",
+      "Bash(gh auth *)",
+      "Bash(brew --version)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }

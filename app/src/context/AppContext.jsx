@@ -307,6 +307,24 @@ export function AppProvider({ children }) {
     if (error) throw error;
   }, []);
 
+  // Le mie schedine — elenco e cancellazione (con rimborso funnies).
+  // `listMyBets` ritorna un array di { bet_id, league_id, round,
+  // funnies_awarded, created_at, first_kickoff_at, editable, picks[] }.
+  const listMyBets = useCallback(async () => {
+    if (!supabase) return [];
+    const { data, error } = await supabase.rpc('list_my_bets');
+    if (error) throw error;
+    return data || [];
+  }, []);
+
+  const deleteMyBet = useCallback(async (betId) => {
+    if (!supabase) throw new Error('Supabase non configurato');
+    const { error } = await supabase.rpc('delete_my_bet', { p_bet_id: Number(betId) });
+    if (error) throw error;
+    await refreshProfile();
+    return true;
+  }, [refreshProfile]);
+
   // Promuove l'utente corrente ad admin usando la passphrase master
   // definita nella funzione SQL public.bootstrap_admin.
   const bootstrapAdmin = useCallback(async (secret) => {
@@ -407,6 +425,8 @@ export function AppProvider({ children }) {
     adminDeleteFixture,
     countRoundEntrants,
     bootstrapAdmin,
+    listMyBets,
+    deleteMyBet,
   };
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

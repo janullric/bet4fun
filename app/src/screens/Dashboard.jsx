@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Screen from '../components/Screen.jsx';
 import Icon from '../components/Icon.jsx';
@@ -8,7 +8,7 @@ import LeaderRow from '../components/LeaderRow.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { CONTESTS } from '../lib/contests.js';
 import { useUpcomingForLeagues } from '../hooks/useEvents.js';
-import { formatMatchDate } from '../lib/format.js';
+import { formatMatchDate, formatCountdown } from '../lib/format.js';
 
 const TOP_LEADERS = [
   { n: 1, nick: 'CP72',         pts: 9195, delta: 0 },
@@ -23,10 +23,26 @@ function contestForEvent(e) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { funnies, user } = useApp();
+  const { funnies, user, listMyBets, isSupabaseConfigured, isAuthed } = useApp();
 
   const leagueIds = useMemo(() => CONTESTS.map((c) => c.league.id), []);
   const { data: events, loading } = useUpcomingForLeagues(leagueIds, 3);
+
+  // Notifiche: carico le schedine dell'utente per costruire il pannello
+  // (schedine aperte da gestire + ultime vincite). È un dato leggero che
+  // vale la pena avere subito al mount del dashboard.
+  const [bets, setBets] = useState([]);
+  useEffect(() => {
+    if (!isSupabaseConfigured || !isAuthed || !listMyBets) return;
+    let alive = true;
+    listMyBets()
+      .then((rows) => { if (alive) setBets(rows || []); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [isSupabaseConfigured, isAuthed, listMyBets]);
+
+  const openBets = useMemo(() => bets.filter((b) => b.editable), [bets]);
+  const hasNotifications = openBets.length > 0 || bets.length > 0;
   const upcoming = useMemo(() => {
     const seen = new Set();
     const unique = (events || []).filter((e) =>
@@ -49,35 +65,12 @@ export default function Dashboard() {
       }
       subtitle="Ecco il riepilogo del tuo mese."
       headerRight={
-        <button
-          aria-label="Notifiche"
-          style={{
-            background: 'rgba(255,255,255,0.06)',
-            border: 0,
-            color: '#F5F6FA',
-            width: 40,
-            height: 40,
-            borderRadius: 14,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            position: 'relative',
-          }}
-        >
-          <Icon name="bell" size={20} />
-          <span
-            style={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              width: 8,
-              height: 8,
-              borderRadius: 4,
-              background: '#FF5A6A',
-            }}
-          />
-        </button>
+        <NotificationsBell
+          bets={bets}
+          openBets={openBets}
+          hasNotifications={hasNotifications}
+          onNavigate={navigate}
+        />
       }
     >
       {/* card saldo */}
@@ -164,6 +157,16 @@ export default function Dashboard() {
           label="Pronostica"
           sub="3 concorsi aperti"
           accent
+        />
+        <QuickAction
+          onClick={() => navigate('/schedine')}
+          icon="trophy"
+          label="Le mie schedine"
+          sub={
+            bets.length
+              ? `${bets.length} giocate${openBets.length ? ` · ${openBets.length} aperte` : ''}`
+              : 'Nessuna ancora'
+          }
         />
         <QuickAction
           onClick={() => navigate('/boost')}
@@ -380,6 +383,232 @@ export default function Dashboard() {
         ))}
       </div>
     </Screen>
+  );
+}
+
+function NotificationsBell({ bets, openBets, hasNotifications, onNavigate }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  const recent = (bets || []).slice(0, 3);
+
+  const go = (path) => {
+    setOpen(false);
+    onNavigate(path);
+  };
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        aria-label="Notifiche"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          background: 'rgba(255,255,255,0.06)',
+          border: 0,
+          color: '#F5F6FA',
+          width: 40,
+          height: 40,
+          borderRadius: 14,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          position: 'relative',
+        }}
+      >
+        <Icon name="bell" size={20} />
+        {hasNotifications && (
+          <span
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              width: 8,
+              height: 8,
+              borderRadius: 4,
+              background: '#FF5A6A',
+            }}
+          />
+        )}
+      </button>
+
+      {open && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 48,
+            right: 0,
+            width: 280,
+            background: '#111830',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 16,
+            boxShadow: '0 18px 40px rgba(0,0,0,0.4)',
+            padding: 12,
+            zIndex: 20,
+            fontFamily: 'Inter',
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              fontFamily: 'JetBrains Mono',
+              color: 'rgba(245,246,250,0.5)',
+              textTransform: 'uppercase',
+              letterSpacing: 1,
+              padding: '2px 4px 8px',
+            }}
+          >
+            Notifiche
+          </div>
+
+          {openBets.length > 0 && (
+            <button
+              onClick={() => go('/schedine')}
+              style={{
+                width: '100%',
+                textAlign: 'left',
+                background: 'rgba(34,197,94,0.10)',
+                border: '1px solid rgba(34,197,94,0.25)',
+                color: '#F5F6FA',
+                borderRadius: 12,
+                padding: '10px 12px',
+                marginBottom: 8,
+                cursor: 'pointer',
+                fontFamily: 'Inter',
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 700 }}>
+                {openBets.length} schedine aperte
+              </div>
+              <div style={{ fontSize: 11, color: 'rgba(245,246,250,0.65)', marginTop: 2 }}>
+                Puoi ancora modificarle prima del kickoff · Gestisci →
+              </div>
+            </button>
+          )}
+
+          {recent.length > 0 && (
+            <div
+              style={{
+                fontSize: 10,
+                fontFamily: 'JetBrains Mono',
+                color: 'rgba(245,246,250,0.45)',
+                textTransform: 'uppercase',
+                letterSpacing: 1,
+                padding: '6px 4px 4px',
+              }}
+            >
+              Ultime giocate
+            </div>
+          )}
+
+          {recent.map((b) => {
+            const c = CONTESTS.find((x) => String(x.league.id) === String(b.league_id));
+            const leagueLabel = c?.league.label || b.league_id;
+            const countdown = b.editable && b.first_kickoff_at
+              ? formatCountdown(b.first_kickoff_at)
+              : null;
+            return (
+              <button
+                key={b.bet_id}
+                onClick={() => go('/schedine')}
+                style={{
+                  width: '100%',
+                  textAlign: 'left',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: 0,
+                  color: '#F5F6FA',
+                  borderRadius: 10,
+                  padding: '8px 10px',
+                  marginBottom: 6,
+                  cursor: 'pointer',
+                  fontFamily: 'Inter',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                }}
+              >
+                <div
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
+                    background: b.editable ? '#22c55e' : 'rgba(255,90,106,0.8)',
+                    flexShrink: 0,
+                  }}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {leagueLabel}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'rgba(245,246,250,0.55)' }}>
+                    {b.editable
+                      ? (countdown ? `Inizia tra ${countdown}` : 'Aperta')
+                      : 'Chiusa'}
+                  </div>
+                </div>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontFamily: 'JetBrains Mono',
+                    color: b.editable ? '#22c55e' : '#FF5A6A',
+                  }}
+                >
+                  +{b.funnies_awarded}
+                </span>
+              </button>
+            );
+          })}
+
+          {!hasNotifications && (
+            <div
+              style={{
+                padding: '10px 4px',
+                color: 'rgba(245,246,250,0.55)',
+                fontSize: 12,
+              }}
+            >
+              Nessuna notifica per ora. Gioca una schedina per iniziare.
+            </div>
+          )}
+
+          <button
+            onClick={() => go('/schedine')}
+            style={{
+              marginTop: 8,
+              width: '100%',
+              background: '#FFDD2E',
+              color: '#0A0F1F',
+              border: 0,
+              borderRadius: 10,
+              padding: '9px 12px',
+              fontFamily: 'Space Grotesk',
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            Apri tutte le schedine
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
