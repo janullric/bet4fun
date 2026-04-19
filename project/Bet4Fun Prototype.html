@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Bet4Fun — Prototipo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #05070F; font-family: 'Inter', system-ui, sans-serif; }
+  ::-webkit-scrollbar { display: none; }
+  body { color: #F5F6FA; min-height: 100vh; }
+
+  .stage {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 40px 20px;
+    background:
+      radial-gradient(60% 40% at 20% 0%, rgba(76,125,255,0.12) 0%, transparent 60%),
+      radial-gradient(50% 35% at 80% 100%, rgba(255,221,46,0.08) 0%, transparent 60%),
+      #05070F;
+  }
+
+  .device-wrap {
+    position: relative;
+    display: flex;
+    gap: 60px;
+    align-items: center;
+  }
+
+  .device-shell {
+    width: 390px; height: 844px; border-radius: 52px; overflow: hidden;
+    position: relative; background: #000;
+    box-shadow:
+      0 50px 100px rgba(0,0,0,0.55),
+      0 0 0 12px #111,
+      0 0 0 13px #2a2a2a,
+      inset 0 0 0 2px rgba(255,255,255,0.04);
+  }
+  .device-inner { width: 100%; height: 100%; overflow: hidden; position: relative; background: #0A0F1F; }
+  .dynamic-island {
+    position: absolute; top: 11px; left: 50%; transform: translateX(-50%);
+    width: 120px; height: 35px; border-radius: 20px; background: #000; z-index: 100;
+  }
+  .home-indicator {
+    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    width: 134px; height: 5px; border-radius: 100px; background: rgba(255,255,255,0.4); z-index: 100;
+  }
+
+  .side-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: rgba(245,246,250,0.35);
+    text-transform: uppercase; letter-spacing: 2px;
+    display: flex; flex-direction: column; gap: 6px;
+    max-width: 220px;
+  }
+  .side-label .big {
+    font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700;
+    letter-spacing: -0.6px; color: #F5F6FA; text-transform: none;
+  }
+  .side-label .accent { color: #FFDD2E; }
+
+  /* Tweaks panel */
+  .tweaks-panel {
+    position: fixed; right: 20px; bottom: 20px; width: 280px;
+    background: rgba(17, 24, 48, 0.95); backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px; padding: 16px; color: #F5F6FA;
+    font-family: 'Inter'; font-size: 12px;
+    z-index: 1000; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    display: none;
+  }
+  .tweaks-panel.open { display: block; }
+  .tweaks-panel h3 {
+    font-family: 'Space Grotesk'; font-weight: 700; font-size: 14px;
+    margin: 0 0 12px; letter-spacing: -0.3px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .tweak-row { margin-bottom: 12px; }
+  .tweak-row label { display: block; font-size: 10px; color: rgba(245,246,250,0.5); font-family: 'JetBrains Mono'; text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 6px; }
+  .tweak-swatches { display: flex; gap: 6px; }
+  .tweak-swatch { width: 28px; height: 28px; border-radius: 8px; border: 2px solid transparent; cursor: pointer; }
+  .tweak-swatch.active { border-color: #F5F6FA; }
+  .tweak-chip {
+    padding: 6px 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
+    color: #F5F6FA; border-radius: 100; font-size: 11px; cursor: pointer; font-family: 'Inter';
+  }
+  .tweak-chip.active { background: #FFDD2E; color: #0A0F1F; border-color: #FFDD2E; }
+
+  /* Screen transition */
+  .screen-wrap { height: 100%; position: absolute; inset: 0; animation: fadeSlide 0.35s cubic-bezier(0.22, 0.61, 0.36, 1); }
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(8px) scale(0.985); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="device-wrap">
+    <div class="side-label" style="text-align: right;">
+      <span>01 · Prototipo mobile</span>
+      <span class="big">Bet<span class="accent">4</span>Fun</span>
+      <span>Pronostici gratuiti · 2026</span>
+    </div>
+    <div class="device-shell">
+      <div class="dynamic-island"></div>
+      <div class="device-inner" id="root"></div>
+      <div class="home-indicator"></div>
+    </div>
+    <div class="side-label">
+      <span>Navigazione</span>
+      <span class="big" style="font-size: 14px; font-family: 'Inter'; font-weight: 500; line-height: 1.6; color: rgba(245,246,250,0.7);">
+        Usa la bottom tab e i pulsanti nel flusso — tutto cliccabile: login, schedina con calcolo punti, classifiche, premi.
+      </span>
+      <span style="margin-top: 14px;">Tweaks: tasto in basso a destra</span>
+    </div>
+  </div>
+</div>
+
+<button id="tweaks-toggle" style="
+  position: fixed; right: 20px; bottom: 20px; z-index: 1001;
+  width: 48px; height: 48px; border-radius: 24px; border: 0; cursor: pointer;
+  background: #FFDD2E; color: #0A0F1F; font-size: 20px;
+  box-shadow: 0 10px 30px rgba(255,221,46,0.3);
+">✦</button>
+
+<div class="tweaks-panel" id="tweaks">
+  <h3>Tweaks <button id="tweaks-close" style="background:none;border:0;color:rgba(245,246,250,0.5);font-size:18px;cursor:pointer;">×</button></h3>
+
+  <div class="tweak-row">
+    <label>Colore primario</label>
+    <div class="tweak-swatches" id="primary-swatches"></div>
+  </div>
+
+  <div class="tweak-row">
+    <label>Densità</label>
+    <div style="display:flex; gap:6px;">
+      <button class="tweak-chip" data-density="compact">Compact</button>
+      <button class="tweak-chip active" data-density="comfortable">Comfort</button>
+    </div>
+  </div>
+
+  <div class="tweak-row">
+    <label>Vai a schermata</label>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:4px;">
+      <button class="tweak-chip" data-goto="landing">Landing</button>
+      <button class="tweak-chip" data-goto="iscrizione">Iscrizione</button>
+      <button class="tweak-chip" data-goto="home">Dashboard</button>
+      <button class="tweak-chip" data-goto="pronostici">Pronostici</button>
+      <button class="tweak-chip" data-goto="schedina">Schedina</button>
+      <button class="tweak-chip" data-goto="classifiche">Classifiche</button>
+      <button class="tweak-chip" data-goto="premi">Premi</button>
+      <button class="tweak-chip" data-goto="profilo">Profilo</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="tokens.jsx"></script>
+<script type="text/babel" src="shell.jsx"></script>
+<script type="text/babel" src="screens-auth.jsx"></script>
+<script type="text/babel" src="screens-dashboard.jsx"></script>
+<script type="text/babel" src="screens-pronostici.jsx"></script>
+<script type="text/babel" src="screens-rest.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+function App() {
+  // Persist current screen across reload
+  const [route, setRoute] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('b4f:route')) || { screen: 'landing' }; }
+    catch { return { screen: 'landing' }; }
+  });
+  const [funnies, setFunnies] = useState(14200);
+  const [tab, setTab] = useState('home');
+
+  useEffect(() => { localStorage.setItem('b4f:route', JSON.stringify(route)); }, [route]);
+
+  const go = (screen, payload) => {
+    // Update main tab if it's a tab destination
+    if (['home','pronostici','classifiche','premi','profilo'].includes(screen)) setTab(screen);
+    setRoute({ screen, payload });
+  };
+
+  // Expose goto for Tweaks panel
+  useEffect(() => {
+    window.__b4f_goto = (s) => go(s);
+  }, []);
+
+  const isLogged = route.screen !== 'landing' && route.screen !== 'iscrizione';
+  const hideTab = ['landing', 'iscrizione', 'schedina'].includes(route.screen);
+
+  let content;
+  switch (route.screen) {
+    case 'landing':
+      content = <HomePublic onAuth={(m) => go(m === 'signup' ? 'iscrizione' : 'iscrizione')}/>;
+      break;
+    case 'iscrizione':
+      content = <Iscrizione onDone={() => go('home')} onBack={() => go('landing')}/>;
+      break;
+    case 'home':
+      content = <Dashboard go={go} funnies={funnies}/>;
+      break;
+    case 'pronostici':
+      content = <PronosticiList go={go}/>;
+      break;
+    case 'schedina':
+      content = <Schedina go={go} contest={route.payload}/>;
+      break;
+    case 'classifiche':
+      content = <Classifiche go={go}/>;
+      break;
+    case 'premi':
+      content = <Premi go={go} funnies={funnies}/>;
+      break;
+    case 'profilo':
+      content = <Profilo go={go} funnies={funnies} onLogout={() => go('landing')}/>;
+      break;
+    default:
+      content = <HomePublic onAuth={() => go('iscrizione')}/>;
+  }
+
+  return (
+    <>
+      <div className="screen-wrap" key={route.screen}>
+        {content}
+      </div>
+      {isLogged && !hideTab && <TabBar tab={tab} go={go}/>}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+
+<script>
+// Tweaks panel logic (vanilla)
+const palettes = {
+  'classic': { primary: '#FFDD2E', bg: '#0A0F1F', accent: '#4C7DFF' },
+  'amber': { primary: '#F5B82E', bg: '#120E05', accent: '#E07856' },
+  'cyan': { primary: '#00E5D1', bg: '#071015', accent: '#FF5A8C' },
+  'lime': { primary: '#C2F24A', bg: '#0C0F05', accent: '#A26BFF' },
+};
+const toggleBtn = document.getElementById('tweaks-toggle');
+const panel = document.getElementById('tweaks');
+const closeBtn = document.getElementById('tweaks-close');
+toggleBtn.onclick = () => panel.classList.toggle('open');
+closeBtn.onclick = () => panel.classList.remove('open');
+
+const swatchBox = document.getElementById('primary-swatches');
+Object.entries(palettes).forEach(([k, v], i) => {
+  const s = document.createElement('button');
+  s.className = 'tweak-swatch' + (i === 0 ? ' active' : '');
+  s.style.background = `linear-gradient(135deg, ${v.primary}, ${v.accent})`;
+  s.dataset.key = k;
+  s.onclick = () => {
+    document.querySelectorAll('.tweak-swatch').forEach(x => x.classList.remove('active'));
+    s.classList.add('active');
+    document.documentElement.style.setProperty('--b4f-primary', v.primary);
+    // Simple: flash a message; deep palette swap would rewire tokens
+  };
+  swatchBox.appendChild(s);
+});
+
+document.querySelectorAll('[data-goto]').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('[data-goto]').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    if (window.__b4f_goto) window.__b4f_goto(b.dataset.goto);
+  };
+});
+document.querySelectorAll('[data-density]').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('[data-density]').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+  };
+});
+</script>
+</body>
+</html>
