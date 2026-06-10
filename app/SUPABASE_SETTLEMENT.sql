@@ -444,3 +444,42 @@ revoke execute on function public.distribute_round_pot(text, int)               
 revoke execute on function public.admin_close_round(text, int, bigint, bigint)  from anon;
 revoke execute on function public.list_my_bets()                                from anon;
 revoke execute on function public.delete_my_bet(bigint)                         from anon;
+
+-- ---------- Anti-cheat: lockout server-side automatico ----------
+-- submit_bet rifiuta le giocate dopo il primo kickoff della giornata SOLO
+-- se round_schedule ha la riga. Questo trigger la mantiene allineata alle
+-- fixtures, così ogni import (manuale o da TheSportsDB) attiva il lockout.
+
+create or replace function public.sync_round_schedule()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $func$
+begin
+  if new.round is not null then
+    insert into public.round_schedule (league_id, round, kickoff_at)
+    select new.league_id, new.round, min(f.kickoff_at)
+      from public.fixtures f
+     where f.league_id = new.league_id and f.round = new.round
+     group by 1, 2
+    on conflict (league_id, round) do update
+      set kickoff_at = excluded.kickoff_at;
+  end if;
+  return new;
+end;
+$func$;
+
+drop trigger if exists fixtures_sync_schedule on public.fixtures;
+create trigger fixtures_sync_schedule
+  after insert or update of kickoff_at, round on public.fixtures
+  for each row execute function public.sync_round_schedule();
+
+-- Backfill per le giornate già caricate.
+insert into public.round_schedule (league_id, round, kickoff_at)
+select league_id, round, min(kickoff_at)
+  from public.fixtures
+ where round is not null
+ group by league_id, round
+on conflict (league_id, round) do update
+  set kickoff_at = excluded.kickoff_at;
