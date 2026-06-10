@@ -152,11 +152,14 @@ async function fetchRound(leagueId, round, season) {
 const fixturesCache = new Map();
 
 function normalizeFixture(row) {
+  // Eventi "singoli" (GP di F1, gare di ciclismo, card UFC) non hanno una
+  // squadra ospite: l'admin li salva con away = '-' e il nome evento in home.
+  const single = !row.away || row.away === '-';
   return {
     id:        row.event_id,
-    event:     `${row.home} vs ${row.away}`,
+    event:     single ? row.home : `${row.home} vs ${row.away}`,
     home:      row.home,
-    away:      row.away,
+    away:      single ? '' : row.away,
     league:    null,
     sport:     '',
     round:     row.round,

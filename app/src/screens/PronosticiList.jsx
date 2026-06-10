@@ -56,7 +56,28 @@ export default function PronosticiList() {
     return map;
   }, [rounds]);
 
-  const visible = filter === 'tutti' ? CONTESTS : CONTESTS.filter((c) => c.sport === filter);
+  const visible = useMemo(
+    () => (filter === 'tutti' ? CONTESTS : CONTESTS.filter((c) => c.sport === filter)),
+    [filter]
+  );
+
+  // Giocabili in alto (kickoff più vicino per primo), chiusi/vuoti in fondo.
+  const sorted = useMemo(() => {
+    const rank = (c) => {
+      const meta = metaByLeague.get(c.league.id);
+      const n = meta?.count ?? 0;
+      const hasRound = (meta?.round ?? null) != null && n > 0;
+      const kick = meta?.firstKickISO ? new Date(meta.firstKickISO).getTime() : Infinity;
+      const locked = Number.isFinite(kick) && Date.now() >= kick - 60 * 1000;
+      return { playable: hasRound && !locked, kick };
+    };
+    return [...visible].sort((a, b) => {
+      const ra = rank(a);
+      const rb = rank(b);
+      if (ra.playable !== rb.playable) return ra.playable ? -1 : 1;
+      return ra.kick - rb.kick;
+    });
+  }, [visible, metaByLeague]);
 
   return (
     <Screen
@@ -121,7 +142,7 @@ export default function PronosticiList() {
       )}
 
       <div style={{ padding: '0 22px' }}>
-        {visible.map((c) => {
+        {sorted.map((c) => {
           const meta = metaByLeague.get(c.league.id);
           const n = meta?.count ?? 0;
           const roundNumber = meta?.round ?? null;
