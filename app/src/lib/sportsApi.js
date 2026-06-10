@@ -337,20 +337,40 @@ export async function fetchCurrentRoundByLeague(leagueOrId, seasonOverride) {
     : leagueOrId;
   if (!league) return { round: null, events: [] };
   const leagueId = league.id;
+
+  // 1) Supabase-first: se l'admin ha caricato le fixtures usiamo quelle
+  //    (nessun rate limit). Stessa logica: round più basso con partite future.
+  const local = await fetchFixturesFromSupabase(leagueId);
+  if (local && local.length > 0) {
+    const picked = pickCurrentRound(local);
+    if (picked) return picked;
+    // Fixtures presenti ma tutte passate → niente fallback remoto: la
+    // giornata è semplicemente chiusa.
+    return { round: null, events: [] };
+  }
+
+  // 2) Fallback TheSportsDB.
   const season = seasonOverride || league.season || CURRENT_SEASON;
   const scan = league.scanRounds || FOOTBALL_ROUNDS;
   const results = await Promise.allSettled(
     scan.map((r) => fetchRound(leagueId, r, season))
   );
-  const byRound = new Map();
+  const remote = [];
   for (const r of results) {
-    if (r.status !== 'fulfilled') continue;
-    for (const ev of r.value) {
-      const key = Number(ev.round);
-      if (!Number.isFinite(key)) continue;
-      if (!byRound.has(key)) byRound.set(key, []);
-      byRound.get(key).push(ev);
-    }
+    if (r.status === 'fulfilled') remote.push(...r.value);
+  }
+  return pickCurrentRound(remote) || { round: null, events: [] };
+}
+
+// Round più basso che abbia ancora almeno una partita futura, con i suoi
+// eventi futuri ordinati per kickoff. Null se non c'è niente di giocabile.
+function pickCurrentRound(events) {
+  const byRound = new Map();
+  for (const ev of events) {
+    const key = Number(ev.round);
+    if (!Number.isFinite(key)) continue;
+    if (!byRound.has(key)) byRound.set(key, []);
+    byRound.get(key).push(ev);
   }
   const rounds = [...byRound.keys()].sort((a, b) => a - b);
   for (const r of rounds) {
@@ -359,5 +379,5 @@ export async function fetchCurrentRoundByLeague(leagueOrId, seasonOverride) {
     future.sort((a, b) => new Date(a.dateISO) - new Date(b.dateISO));
     return { round: r, events: future };
   }
-  return { round: null, events: [] };
+  return null;
 }
