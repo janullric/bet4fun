@@ -186,6 +186,16 @@ export function AppProvider({ children }) {
     return row || null;
   }, []);
 
+  // Verifica se un nickname è libero (case-insensitive). Usato dal form
+  // di iscrizione PRIMA di chiamare signUp, così l'utente vede subito
+  // "nick già in uso" invece del criptico "Database error saving new user".
+  const nickAvailable = useCallback(async (nick) => {
+    if (!supabase) return true;
+    const { data, error } = await supabase.rpc('nick_available', { p_nick: nick });
+    if (error) return true; // in dubbio non blocchiamo: ci pensa il trigger
+    return Boolean(data);
+  }, []);
+
   // Statistiche pubbliche (landing): iscritti totali + montepremi del mese.
   // Funziona anche senza login (grant ad anon).
   const publicStats = useCallback(async () => {
@@ -447,6 +457,7 @@ export function AppProvider({ children }) {
     monthlyChallenge,
     publicStats,
     myRank,
+    nickAvailable,
     isAdmin,
     adminSetMatchResult,
     adminSettleRound,

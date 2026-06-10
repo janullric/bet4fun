@@ -14,7 +14,7 @@ const STEPS = ['Account', 'Preferenze', 'Consensi', 'Pronti'];
 
 export default function Iscrizione() {
   const navigate = useNavigate();
-  const { signUp, signIn, isSupabaseConfigured } = useApp();
+  const { signUp, signIn, isSupabaseConfigured, nickAvailable } = useApp();
 
   const [mode, setMode] = useState('signup'); // 'signup' | 'login'
   const [step, setStep] = useState(0);
@@ -69,6 +69,21 @@ export default function Iscrizione() {
       return;
     }
 
+    if (step === 0 && isSupabaseConfigured) {
+      // Verifica subito che il nickname sia libero: meglio scoprirlo qui
+      // che con un errore criptico alla fine del wizard.
+      setSubmitting(true);
+      try {
+        const free = await nickAvailable(data.nick.trim());
+        if (!free) {
+          setError(`Il nickname "${data.nick.trim()}" è già in uso: scegline un altro.`);
+          return;
+        }
+      } finally {
+        setSubmitting(false);
+      }
+    }
+
     if (step < 3) {
       setStep(step + 1);
       return;
@@ -89,7 +104,14 @@ export default function Iscrizione() {
       });
       navigate('/home');
     } catch (e) {
-      setError(e.message || 'Iscrizione fallita.');
+      // GoTrue ritorna un 500 generico se il trigger fallisce: traduciamo
+      // il caso più comune (nick duplicato in race) in un messaggio utile.
+      const msg = String(e?.message || '');
+      if (msg.includes('Database error saving new user')) {
+        setError('Iscrizione non riuscita: prova con un nickname diverso o riprova tra poco.');
+      } else {
+        setError(msg || 'Iscrizione fallita.');
+      }
     } finally {
       setSubmitting(false);
     }
