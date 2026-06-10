@@ -3,6 +3,7 @@ import Screen from '../components/Screen.jsx';
 import SectionHeader from '../components/SectionHeader.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { LEAGUES, fetchTheSportsDBRound } from '../lib/sportsApi.js';
+import { CONTESTS } from '../lib/contests.js';
 
 // Pannello admin minimale: inserimento risultati, chiusura giornata,
 // distribuzione monte premi e impostazione kickoff. Per tutto il resto
@@ -13,6 +14,7 @@ export default function Admin() {
   const {
     isAdmin, isAuthed, isSupabaseConfigured,
     adminSetMatchResult, adminSettleRound, adminDistributeRound, adminSetRoundPot,
+    adminCloseRound,
     adminListLeadCampaigns, adminUpsertLeadCampaign,
     adminToggleLeadCampaign, adminDeleteLeadCampaign,
     adminListFixtures, adminUpsertFixture, adminDeleteFixture,
@@ -74,6 +76,11 @@ export default function Admin() {
           {err && <div style={{ color: '#FF5A6A', fontSize: 13 }}>{err}</div>}
         </div>
       )}
+
+      <SectionHeader title="Chiudi giornata (auto)" />
+      <div style={{ padding: '0 22px 20px' }}>
+        <CloseRoundForm onClose={adminCloseRound} />
+      </div>
 
       <SectionHeader title="Risultato ufficiale" />
       <div style={{ padding: '0 22px 20px' }}>
@@ -216,6 +223,78 @@ function RoundPotForm({ onSubmit, busy }) {
         {busy ? 'Salvo…' : 'Imposta monte premi'}
       </button>
     </form>
+  );
+}
+
+// Chiusura one-click: scegli il concorso (porta con sé base e quota del
+// regolamento), indica la giornata, premi. La RPC admin_close_round fa
+// risultati → punti → montepremi → payout in una sola transazione.
+function CloseRoundForm({ onClose }) {
+  const [contestKey, setContestKey] = useState(CONTESTS[0]?.key || '');
+  const [round, setRound] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+
+  const contest = CONTESTS.find((c) => c.key === contestKey) || null;
+
+  const run = async () => {
+    if (!contest || !round) return;
+    const ok = window.confirm(
+      `Chiudere ${contest.league.label} — giornata ${round}?\n\n` +
+      `Verranno calcolati i punti e distribuiti i Funnies ` +
+      `(base ${contest.basePool} + iscritti × ${contest.perEntrant}). ` +
+      `L'operazione si esegue UNA sola volta per giornata.`
+    );
+    if (!ok) return;
+    setBusy(true); setError(null); setResult(null);
+    try {
+      const out = await onClose({
+        leagueId: contest.league.id,
+        round,
+        basePool: contest.basePool,
+        perEntrant: contest.perEntrant,
+      });
+      setResult(out);
+    } catch (e) {
+      setError(e?.message || 'Errore durante la chiusura.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={formGrid}>
+      <Field label="Concorso">
+        <select value={contestKey} onChange={(e) => setContestKey(e.target.value)} style={input}>
+          {CONTESTS.map((c) => (
+            <option key={c.key} value={c.key}>
+              {c.league.label} (base {c.basePool} + n × {c.perEntrant})
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Round / giornata">
+        <input value={round} onChange={(e) => setRound(e.target.value)} type="number" style={input} />
+      </Field>
+      <button
+        type="button"
+        disabled={busy || !contest || !round}
+        onClick={run}
+        style={{ ...submitBtn, background: '#3DDC97' }}
+      >
+        {busy ? 'Chiusura in corso…' : 'Chiudi e paga la giornata'}
+      </button>
+      {error && <div style={{ color: '#FF5A6A', fontSize: 13 }}>{error}</div>}
+      {result && (
+        <div style={{ color: '#3DDC97', fontSize: 13, lineHeight: 1.6 }}>
+          Giornata chiusa ✓ — {result.entrants} iscritti ·
+          montepremi {Number(result.prize_pool).toLocaleString('it-IT')} ·
+          {result.winners} vincitori ·
+          {Number(result.total_paid).toLocaleString('it-IT')} Funnies pagati.
+        </div>
+      )}
+    </div>
   );
 }
 

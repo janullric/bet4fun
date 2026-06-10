@@ -235,6 +235,21 @@ export function AppProvider({ children }) {
     return data || [];
   }, []);
 
+  // Chiusura one-click: risultati dalle fixtures → punti → montepremi
+  // (base + iscritti × quota) → distribuzione. Tutto in una transazione.
+  const adminCloseRound = useCallback(async ({ leagueId, round, basePool, perEntrant }) => {
+    if (!supabase) throw new Error('Supabase non configurato');
+    const { data, error } = await supabase.rpc('admin_close_round', {
+      p_league_id:   String(leagueId),
+      p_round:       Number(round),
+      p_base_pool:   Number(basePool) || 0,
+      p_per_entrant: Number(perEntrant) || 0,
+    });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    return row || null;
+  }, []);
+
   const adminListLeadCampaigns = useCallback(async () => {
     if (!supabase) return [];
     const { data, error } = await supabase.rpc('admin_list_lead_campaigns');
@@ -415,6 +430,7 @@ export function AppProvider({ children }) {
     adminSetMatchResult,
     adminSettleRound,
     adminDistributeRound,
+    adminCloseRound,
     adminSetRoundPot,
     adminListLeadCampaigns,
     adminUpsertLeadCampaign,

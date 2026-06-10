@@ -11,6 +11,9 @@
 import { LEAGUES } from './sportsApi.js';
 
 export const CONTESTS = [
+  // --- Mondiali 2026 (evento clou: in cima alla lista) ---
+  { key: 'worldcup', league: LEAGUES.worldcup, sport: 'football', sub: 'USA · Canada · Messico', basePool: 15000, perEntrant: 150, points: 15000, urgent: true },
+
   // --- Calcio ---
   { key: 'serieA',  league: LEAGUES.serieA,  sport: 'football',   sub: 'Prossima giornata', basePool: 7500, perEntrant: 100, points: 7500, urgent: true },
   { key: 'premier', league: LEAGUES.premier, sport: 'football',   sub: 'Prossima giornata', basePool: 7000, perEntrant: 100, points: 7000 },

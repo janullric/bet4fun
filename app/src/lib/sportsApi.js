@@ -48,6 +48,11 @@ export const LEAGUES = {
   ligue1:  { id: '4334', name: 'French Ligue 1',         label: 'Ligue 1',         country: 'Francia',     sport: 'football',   pickType: '1X2', season: CURRENT_SEASON, scanRounds: FOOTBALL_ROUNDS },
   mls:     { id: '4346', name: 'American MLS',           label: 'MLS',             country: 'USA',         sport: 'football',   pickType: '1X2', season: '2026',         scanRounds: FOOTBALL_ROUNDS },
 
+  // --- Mondiali FIFA 2026 (USA/Canada/Messico, dall'11 giugno) ---
+  // Gironi = round 1..3; a eliminazione TheSportsDB usa i codici speciali
+  // (125 quarti, 150 semifinali, 160 finale 3° posto, 200 finale).
+  worldcup:{ id: '4429', name: 'FIFA World Cup',         label: 'Mondiali 2026',   country: 'Mondiale',    sport: 'football',   pickType: '1X2', season: '2026',         scanRounds: [1, 2, 3, 4, 5, 125, 150, 160, 200] },
+
   // --- Calcio (coppe europee) ---
   ucl:     { id: '4480', name: 'UEFA Champions League',  label: 'Champions League',country: 'Europa',      sport: 'football',   pickType: '1X2', season: CURRENT_SEASON, scanRounds: [1, 2, 3, 4, 5, 6, 7, 8] },
   uel:     { id: '4481', name: 'UEFA Europa League',     label: 'Europa League',   country: 'Europa',      sport: 'football',   pickType: '1X2', season: CURRENT_SEASON, scanRounds: [1, 2, 3, 4, 5, 6, 7, 8] },

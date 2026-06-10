@@ -159,6 +159,8 @@ export default function Schedine() {
           const rLabel = roundLabel(c?.sport, b.round);
           const picksCount = Array.isArray(b.picks) ? b.picks.length : 0;
           const editable = !!b.editable;
+          const settled = !!b.settled;
+          const payout = Number(b.payout) || 0;
           const busy = busyId === b.bet_id;
           const countdown = b.first_kickoff_at ? formatCountdown(b.first_kickoff_at) : null;
 
@@ -186,10 +188,12 @@ export default function Schedine() {
                   right: 12,
                   padding: '3px 8px',
                   borderRadius: 100,
-                  background: editable
-                    ? 'rgba(34,197,94,0.15)'
-                    : 'rgba(255,90,106,0.15)',
-                  color: editable ? '#22c55e' : '#FF5A6A',
+                  background: settled
+                    ? 'rgba(255,221,46,0.15)'
+                    : editable
+                      ? 'rgba(34,197,94,0.15)'
+                      : 'rgba(255,90,106,0.15)',
+                  color: settled ? '#FFDD2E' : editable ? '#22c55e' : '#FF5A6A',
                   fontSize: 10,
                   fontFamily: 'JetBrains Mono',
                   textTransform: 'uppercase',
@@ -197,7 +201,7 @@ export default function Schedine() {
                   fontWeight: 600,
                 }}
               >
-                {editable ? 'Aperta' : 'Chiusa'}
+                {settled ? 'Conclusa' : editable ? 'Aperta' : 'Chiusa'}
               </div>
 
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
@@ -256,20 +260,41 @@ export default function Schedine() {
 
               <div style={{ display: 'flex', gap: 16, fontSize: 12, marginBottom: 12 }}>
                 <Stat label="Pronostici" value={picksCount} />
-                <Stat
-                  label="Funnies"
-                  value={
-                    <>
-                      <Funnie size={11} /> {Number(b.funnies_awarded || 0).toLocaleString('it-IT')}
-                    </>
-                  }
-                  color="#FFDD2E"
-                />
-                <Stat
-                  label={editable ? 'Inizia tra' : 'Stato'}
-                  value={editable ? (countdown || '—') : 'Chiusa'}
-                  color={editable ? undefined : '#FF5A6A'}
-                />
+                {settled ? (
+                  <>
+                    <Stat label="Punti" value={Number(b.points) || 0} color="#4C7DFF" />
+                    <Stat
+                      label="Vincita"
+                      value={
+                        payout > 0 ? (
+                          <>
+                            <Funnie size={11} /> {payout.toLocaleString('it-IT')}
+                          </>
+                        ) : (
+                          '—'
+                        )
+                      }
+                      color={payout > 0 ? '#FFDD2E' : undefined}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Stat
+                      label="Funnies"
+                      value={
+                        <>
+                          <Funnie size={11} /> {Number(b.funnies_awarded || 0).toLocaleString('it-IT')}
+                        </>
+                      }
+                      color="#FFDD2E"
+                    />
+                    <Stat
+                      label={editable ? 'Inizia tra' : 'Stato'}
+                      value={editable ? (countdown || '—') : 'In corso'}
+                      color={editable ? undefined : '#FF5A6A'}
+                    />
+                  </>
+                )}
               </div>
 
               <div style={{ display: 'flex', gap: 8 }}>
@@ -314,7 +339,11 @@ export default function Schedine() {
                   </>
                 ) : (
                   <div style={{ fontSize: 12, color: 'rgba(245,246,250,0.5)', padding: '4px 2px' }}>
-                    Giornata chiusa — la schedina non può essere modificata.
+                    {settled
+                      ? payout > 0
+                        ? `Giornata conclusa — hai vinto ${payout.toLocaleString('it-IT')} Funnies! 🎉`
+                        : 'Giornata conclusa — nessuna vincita questa volta.'
+                      : 'Giornata in corso — la schedina non può più essere modificata.'}
                   </div>
                 )}
               </div>
