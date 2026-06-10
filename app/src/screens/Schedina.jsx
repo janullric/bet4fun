@@ -62,11 +62,65 @@ export default function Schedina() {
   const matches = useMemo(() => roundData?.events || [], [roundData]);
   const roundNumber = roundData?.round;
 
-  const { submitBet, isSupabaseConfigured } = useApp();
+  const {
+    submitBet, isSupabaseConfigured, isAuthed, listMyBets, deleteMyBet,
+  } = useApp();
   const [picks, setPicks] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [submitted, setSubmitted] = useState(null); // { bonus, newFunnies } | null
+
+  // Schedina già giocata per questa giornata: la ricarichiamo per mostrare
+  // i pronostici scelti (sola lettura) con possibilità di modifica fino
+  // al kickoff. Niente più form vuoto come se non avessi mai giocato.
+  const [existingBet, setExistingBet] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !isAuthed || !contest || roundNumber == null) return undefined;
+    let alive = true;
+    listMyBets()
+      .then((rows) => {
+        if (!alive) return;
+        const mine = (rows || []).find(
+          (b) => String(b.league_id) === String(contest.league.id)
+            && Number(b.round) === Number(roundNumber)
+        );
+        if (mine) {
+          setExistingBet(mine);
+          const mapped = {};
+          (mine.picks || []).forEach((p) => { mapped[p.event_id] = p.outcome; });
+          setPicks(mapped);
+        }
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSupabaseConfigured, isAuthed, contest?.league.id, roundNumber]);
+
+  const readOnly = Boolean(existingBet) && !editing;
+
+  const startEdit = async () => {
+    if (!existingBet) return;
+    const ok = window.confirm(
+      'Vuoi modificare la schedina?\n\n' +
+      `Quella attuale viene annullata (ti vengono restituiti ${existingBet.funnies_awarded} Funnies). ` +
+      'Ricordati di CONFERMARE i nuovi pronostici prima del kickoff.'
+    );
+    if (!ok) return;
+    setUnlocking(true);
+    setSubmitError(null);
+    try {
+      await deleteMyBet(existingBet.bet_id);
+      setExistingBet(null);
+      setEditing(true);
+    } catch (e) {
+      setSubmitError(e?.message || 'Errore durante la modifica.');
+    } finally {
+      setUnlocking(false);
+    }
+  };
 
   if (!contest) {
     return (
@@ -100,7 +154,7 @@ export default function Schedina() {
   }, [lockoutAt]);
   const locked = lockoutAt != null && now >= lockoutAt;
 
-  const canSubmit = !locked && completed === matches.length && matches.length > 0;
+  const canSubmit = !locked && !readOnly && completed === matches.length && matches.length > 0;
 
   const nextCountdown = matches[0] ? formatCountdown(matches[0].dateISO) : '';
 
@@ -321,6 +375,47 @@ export default function Schedina() {
         </div>
       )}
 
+      {/* Schedina già giocata: riepilogo + modifica fino al kickoff. */}
+      {existingBet && !locked && (
+        <div style={{ padding: '0 22px 14px' }}>
+          <div
+            style={{
+              padding: '12px 14px',
+              background: 'rgba(61,220,151,0.08)',
+              border: '1px solid rgba(61,220,151,0.3)',
+              borderRadius: 14,
+              color: '#A9EFD2',
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            <strong style={{ color: '#3DDC97' }}>Hai già giocato questa giornata.</strong>{' '}
+            Qui sotto vedi i tuoi pronostici confermati.
+            {existingBet.editable && (
+              <button
+                onClick={startEdit}
+                disabled={unlocking}
+                style={{
+                  display: 'block',
+                  marginTop: 10,
+                  background: 'rgba(61,220,151,0.15)',
+                  border: '1px solid rgba(61,220,151,0.4)',
+                  color: '#3DDC97',
+                  borderRadius: 10,
+                  padding: '9px 14px',
+                  fontFamily: 'Space Grotesk',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: unlocking ? 'wait' : 'pointer',
+                }}
+              >
+                {unlocking ? 'Sblocco…' : '✏️ Modifica i pronostici'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* progress */}
       {matches.length > 0 && (
         <div style={{ padding: '0 22px 20px' }}>
@@ -429,15 +524,15 @@ export default function Schedina() {
                   return (
                     <button
                       key={o.id}
-                      onClick={() => !locked && setPick(m.id, o.id)}
-                      disabled={locked}
+                      onClick={() => !locked && !readOnly && setPick(m.id, o.id)}
+                      disabled={locked || readOnly}
                       style={{
                         padding: '14px 8px',
                         borderRadius: 14,
                         border: sel
                           ? '1px solid rgba(255,221,46,0.5)'
                           : '1px solid rgba(255,255,255,0.06)',
-                        cursor: locked ? 'not-allowed' : 'pointer',
+                        cursor: locked || readOnly ? 'not-allowed' : 'pointer',
                         background: sel ? '#FFDD2E' : 'rgba(255,255,255,0.04)',
                         color: sel ? '#0A0F1F' : '#F5F6FA',
                         transition: 'all 0.2s',
@@ -445,7 +540,8 @@ export default function Schedina() {
                         flexDirection: 'column',
                         alignItems: 'center',
                         gap: 3,
-                        opacity: locked ? 0.5 : 1,
+                        // In sola lettura il pick scelto resta ben visibile.
+                        opacity: (locked || readOnly) && !sel ? 0.45 : 1,
                       }}
                     >
                       <span
@@ -530,11 +626,13 @@ export default function Schedina() {
           >
             {submitting
               ? 'Salvataggio…'
-              : locked
-                ? 'Giornata chiusa — non più pronosticabile'
-                : canSubmit
-                  ? `Conferma e guadagna +${completed * 10} Funnies`
-                  : `Completa ${matches.length - completed} manches ancora`}
+              : readOnly
+                ? 'Schedina già confermata ✓'
+                : locked
+                  ? 'Giornata chiusa — non più pronosticabile'
+                  : canSubmit
+                    ? `Conferma e guadagna +${completed * 10} Funnies`
+                    : `Completa ${matches.length - completed} manches ancora`}
           </button>
         </div>
       )}

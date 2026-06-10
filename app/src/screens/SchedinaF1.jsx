@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Screen from '../components/Screen.jsx';
 import Icon from '../components/Icon.jsx';
@@ -13,7 +13,9 @@ import { F1_DRIVERS, F1_POSITIONS, classifyF1Event } from '../lib/f1.js';
 // = 1 pick salvata come outcome "p{N}:{driverId}".
 export default function SchedinaF1({ contest }) {
   const navigate = useNavigate();
-  const { submitBet, isSupabaseConfigured } = useApp();
+  const {
+    submitBet, isSupabaseConfigured, isAuthed, listMyBets, deleteMyBet,
+  } = useApp();
 
   const { data: roundData, loading, error } = useCurrentRoundByLeague(contest?.league || null);
   const allEvents = roundData?.events || [];
@@ -31,6 +33,62 @@ export default function SchedinaF1({ contest }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [submitted, setSubmitted] = useState(null);
+
+  // Schedina già giocata per questo GP: precarica le scelte in sola lettura
+  // con possibilità di modifica fino al via.
+  const [existingBet, setExistingBet] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !isAuthed || !contest || roundNumber == null) return undefined;
+    let alive = true;
+    listMyBets()
+      .then((rows) => {
+        if (!alive) return;
+        const mine = (rows || []).find(
+          (b) => String(b.league_id) === String(contest.league.id)
+            && Number(b.round) === Number(roundNumber)
+        );
+        if (mine) {
+          setExistingBet(mine);
+          // outcome "p{N}:{driverId}" → picks[eventId][N] = driverId
+          const mapped = {};
+          (mine.picks || []).forEach((p) => {
+            const m = /^p(\d+):(.+)$/.exec(p.outcome || '');
+            if (!m) return;
+            mapped[p.event_id] = { ...(mapped[p.event_id] || {}), [Number(m[1])]: m[2] };
+          });
+          setPicks(mapped);
+        }
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSupabaseConfigured, isAuthed, contest?.league.id, roundNumber]);
+
+  const readOnly = Boolean(existingBet) && !editing;
+
+  const startEdit = async () => {
+    if (!existingBet) return;
+    const ok = window.confirm(
+      'Vuoi modificare la schedina?\n\n' +
+      `Quella attuale viene annullata (ti vengono restituiti ${existingBet.funnies_awarded} Funnies). ` +
+      'Ricordati di CONFERMARE i nuovi pronostici prima del via.'
+    );
+    if (!ok) return;
+    setUnlocking(true);
+    setSubmitError(null);
+    try {
+      await deleteMyBet(existingBet.bet_id);
+      setExistingBet(null);
+      setEditing(true);
+    } catch (e) {
+      setSubmitError(e?.message || 'Errore durante la modifica.');
+    } finally {
+      setUnlocking(false);
+    }
+  };
 
   const setPick = (eventId, pos, driverId) =>
     setPicks((p) => ({
@@ -52,7 +110,7 @@ export default function SchedinaF1({ contest }) {
   const anyDupe = sessions.some(sessionHasDupe);
 
   const canSubmit =
-    sessions.length > 0 && completedPicks === totalPicks && !anyDupe && !submitting;
+    sessions.length > 0 && completedPicks === totalPicks && !anyDupe && !submitting && !readOnly;
 
   const nextCountdown = sessions[0] ? formatCountdown(sessions[0].dateISO) : '';
 
@@ -225,6 +283,47 @@ export default function SchedinaF1({ contest }) {
         </div>
       )}
 
+      {/* Schedina già giocata: riepilogo + modifica fino al via. */}
+      {existingBet && (
+        <div style={{ padding: '0 22px 14px' }}>
+          <div
+            style={{
+              padding: '12px 14px',
+              background: 'rgba(61,220,151,0.08)',
+              border: '1px solid rgba(61,220,151,0.3)',
+              borderRadius: 14,
+              color: '#A9EFD2',
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            <strong style={{ color: '#3DDC97' }}>Hai già giocato questo GP.</strong>{' '}
+            Qui sotto vedi i piloti che hai confermato.
+            {existingBet.editable && (
+              <button
+                onClick={startEdit}
+                disabled={unlocking}
+                style={{
+                  display: 'block',
+                  marginTop: 10,
+                  background: 'rgba(61,220,151,0.15)',
+                  border: '1px solid rgba(61,220,151,0.4)',
+                  color: '#3DDC97',
+                  borderRadius: 10,
+                  padding: '9px 14px',
+                  fontFamily: 'Space Grotesk',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: unlocking ? 'wait' : 'pointer',
+                }}
+              >
+                {unlocking ? 'Sblocco…' : '✏️ Modifica i pronostici'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {sessions.length > 0 && (
         <div style={{ padding: '0 22px 20px' }}>
           <div
@@ -334,6 +433,7 @@ export default function SchedinaF1({ contest }) {
                     <select
                       value={chosen[pos] || ''}
                       onChange={(e) => setPick(s.id, pos, e.target.value || null)}
+                      disabled={readOnly}
                       style={{
                         padding: '12px 14px',
                         borderRadius: 12,
@@ -345,7 +445,7 @@ export default function SchedinaF1({ contest }) {
                         fontFamily: 'Inter',
                         fontSize: 14,
                         fontWeight: 600,
-                        cursor: 'pointer',
+                        cursor: readOnly ? 'not-allowed' : 'pointer',
                         appearance: 'none',
                       }}
                     >
@@ -422,11 +522,13 @@ export default function SchedinaF1({ contest }) {
           >
             {submitting
               ? 'Salvataggio…'
-              : canSubmit
-                ? `Conferma e guadagna +${completedPicks * 10} Funnies`
-                : anyDupe
-                  ? 'Rimuovi i duplicati per continuare'
-                  : `Completa ${totalPicks - completedPicks} posizioni ancora`}
+              : readOnly
+                ? 'Schedina già confermata ✓'
+                : canSubmit
+                  ? `Conferma e guadagna +${completedPicks * 10} Funnies`
+                  : anyDupe
+                    ? 'Rimuovi i duplicati per continuare'
+                    : `Completa ${totalPicks - completedPicks} posizioni ancora`}
           </button>
         </div>
       )}
