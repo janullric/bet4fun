@@ -186,6 +186,25 @@ export function AppProvider({ children }) {
     return row || null;
   }, []);
 
+  // Statistiche pubbliche (landing): iscritti totali + montepremi del mese.
+  // Funziona anche senza login (grant ad anon).
+  const publicStats = useCallback(async () => {
+    if (!supabase) return null;
+    const { data, error } = await supabase.rpc('public_stats');
+    if (error) return null;
+    const row = Array.isArray(data) ? data[0] : data;
+    return row || null;
+  }, []);
+
+  // Posizione in classifica + guadagno settimanale + accuratezza dell'utente.
+  const myRank = useCallback(async () => {
+    if (!supabase) return null;
+    const { data, error } = await supabase.rpc('my_rank');
+    if (error) return null;
+    const row = Array.isArray(data) ? data[0] : data;
+    return row || null;
+  }, []);
+
   // Top 50 classifica globale.
   const globalLeaderboard = useCallback(async () => {
     if (!supabase) return [];
@@ -426,6 +445,8 @@ export function AppProvider({ children }) {
     getPublicProfile,
     globalLeaderboard,
     monthlyChallenge,
+    publicStats,
+    myRank,
     isAdmin,
     adminSetMatchResult,
     adminSettleRound,

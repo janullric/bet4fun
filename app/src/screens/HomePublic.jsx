@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Wordmark from '../components/Wordmark.jsx';
 import Funnie from '../components/Funnie.jsx';
 import Icon from '../components/Icon.jsx';
+import { useApp } from '../context/AppContext.jsx';
 
 const SPORTS = [
   ['football', 'Calcio'],
@@ -13,6 +15,26 @@ const SPORTS = [
 export default function HomePublic() {
   const navigate = useNavigate();
   const goSignup = () => navigate('/iscrizione');
+  const { publicStats, isSupabaseConfigured } = useApp();
+
+  // Numeri reali dalla RPC public_stats (iscritti + montepremi mese).
+  // In modalità demo (senza Supabase) restano i placeholder.
+  const [stats, setStats] = useState(null);
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    let alive = true;
+    publicStats()
+      .then((s) => { if (alive) setStats(s); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [isSupabaseConfigured, publicStats]);
+
+  const prizeMonth = isSupabaseConfigured
+    ? (stats ? Number(stats.prize_month).toLocaleString('it-IT') : '…')
+    : '120.000';
+  const playersTotal = isSupabaseConfigured
+    ? (stats ? Number(stats.players).toLocaleString('it-IT') : '…')
+    : '12.847';
 
   return (
     <div
@@ -172,12 +194,12 @@ export default function HomePublic() {
             <Caption>Montepremi mese</Caption>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
               <Funnie size={18} />
-              <BigNum>120.000</BigNum>
+              <BigNum>{prizeMonth}</BigNum>
             </div>
           </div>
           <div style={{ width: 1, background: 'rgba(255,255,255,0.08)' }} />
           <div style={{ flex: 1 }}>
-            <Caption>Giocatori online</Caption>
+            <Caption>Giocatori iscritti</Caption>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
               <span
                 style={{
@@ -188,7 +210,7 @@ export default function HomePublic() {
                   boxShadow: '0 0 6px #3DDC97',
                 }}
               />
-              <BigNum>12.847</BigNum>
+              <BigNum>{playersTotal}</BigNum>
             </div>
           </div>
         </div>

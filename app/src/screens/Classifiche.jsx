@@ -40,9 +40,14 @@ const TABS = [
 
 export default function Classifiche() {
   const [tab, setTab] = useState('generale');
-  const { globalLeaderboard, isSupabaseConfigured } = useApp();
+  const {
+    globalLeaderboard, isSupabaseConfigured, monthlyChallenge,
+    myRank: fetchMyRank, funnies, user,
+  } = useApp();
   const [live, setLive] = useState(null);
+  const [monthly, setMonthly] = useState(null);
   const [myRank, setMyRank] = useState(null);
+  const [rankInfo, setRankInfo] = useState(null);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
@@ -64,11 +69,36 @@ export default function Classifiche() {
         if (mine) setMyRank(mine.n);
       })
       .catch(() => setLive(null));
+    // Posizione/andamento personali (rank esatto anche fuori dalla top 50).
+    fetchMyRank().then((r) => { if (alive) setRankInfo(r); }).catch(() => {});
+    // Classifica mensile reale dalla sfida del mese.
+    monthlyChallenge()
+      .then((c) => {
+        if (!alive || !c || !Array.isArray(c.leaderboard)) return;
+        setMonthly(c.leaderboard.map((r, i) => ({
+          n: r.rank ?? i + 1,
+          nick: r.nick,
+          pts: Number(r.points ?? 0),
+          funnies: Number(r.points ?? 0),
+          delta: 0,
+          me: !!r.is_me,
+        })));
+      })
+      .catch(() => {});
     return () => { alive = false; };
-  }, [isSupabaseConfigured, globalLeaderboard]);
+  }, [isSupabaseConfigured, globalLeaderboard, monthlyChallenge, fetchMyRank]);
 
-  // Sceglie fra dati live e demo a seconda del tab + disponibilità.
-  const data = tab === 'generale' && live && live.length > 0 ? live : DEMO[tab];
+  // Con Supabase configurato mostriamo SOLO dati reali (anche se vuoti);
+  // la demo resta per chi naviga il repo senza backend.
+  const data = !isSupabaseConfigured
+    ? DEMO[tab]
+    : tab === 'generale'
+      ? (live || [])
+      : tab === 'mensile'
+        ? (monthly || [])
+        : []; // amici → si gioca nei Gruppi
+
+  const effRank = rankInfo?.rank ?? myRank;
 
   return (
     <Screen title="Classifiche" subtitle="Confrontati con tutta la community.">
@@ -105,7 +135,7 @@ export default function Classifiche() {
                 lineHeight: 1,
               }}
             >
-              {myRank != null ? `#${myRank}` : '#247'}
+              {effRank != null ? `#${effRank}` : '—'}
             </div>
             <div
               style={{
@@ -116,20 +146,24 @@ export default function Classifiche() {
                 gap: 3,
               }}
             >
-              <Icon name="arrowU" size={12} /> 34 questa settimana
+              <Icon name="arrowU" size={12} />
+              {rankInfo
+                ? `+${Number(rankInfo.weekly_gain).toLocaleString('it-IT')} Funnies questa sett.`
+                : 'questa settimana'}
             </div>
           </div>
           <div style={{ marginTop: 14, display: 'flex', gap: 20 }}>
-            <MiniStat label="Punti" value="8.421" />
-            <MiniStat label="Accuratezza" value="64%" />
+            <MiniStat label="Funnies" value={Number(funnies || 0).toLocaleString('it-IT')} />
             <MiniStat
-              label="Streak"
+              label="Accuratezza"
+              value={rankInfo?.accuracy != null ? `${rankInfo.accuracy}%` : '—'}
+            />
+            <MiniStat
+              label="Giocatori"
               value={
-                <span
-                  style={{ color: '#FFDD2E', display: 'flex', alignItems: 'center', gap: 3 }}
-                >
-                  <Icon name="flame" size={14} /> 7
-                </span>
+                rankInfo?.total_players != null
+                  ? Number(rankInfo.total_players).toLocaleString('it-IT')
+                  : '—'
               }
             />
           </div>
@@ -173,7 +207,35 @@ export default function Classifiche() {
         {data.map((p) => (
           <LeaderRow key={p.n} {...p} />
         ))}
-        {tab !== 'amici' && !(live && live.some((x) => x.me)) && (
+
+        {isSupabaseConfigured && tab !== 'amici' && data.length === 0 && (
+          <div style={{ color: 'rgba(245,246,250,0.5)', fontSize: 13, padding: '8px 0' }}>
+            {tab === 'mensile'
+              ? 'Ancora nessun partecipante questo mese: gioca una schedina!'
+              : 'Ancora nessun giocatore in classifica.'}
+          </div>
+        )}
+
+        {isSupabaseConfigured && tab === 'amici' && (
+          <div
+            style={{
+              background: '#111830',
+              border: '1px solid rgba(255,255,255,0.04)',
+              borderRadius: 18,
+              padding: 18,
+              fontSize: 13,
+              color: 'rgba(245,246,250,0.75)',
+              lineHeight: 1.5,
+            }}
+          >
+            Le classifiche con gli amici vivono nei <strong>Gruppi</strong>: creane
+            uno e condividi il codice invito dalla sezione Gruppi del menu.
+          </div>
+        )}
+
+        {/* La tua riga, se sei fuori dalla top visibile. */}
+        {isSupabaseConfigured && tab === 'generale' && effRank != null
+          && live && live.length > 0 && !live.some((x) => x.me) && (
           <>
             <div
               style={{
@@ -185,7 +247,14 @@ export default function Classifiche() {
             >
               · · ·
             </div>
-            <LeaderRow n={myRank ?? 247} nick="Luca (TU)" pts={8421} funnies={14200} delta={3} me />
+            <LeaderRow
+              n={effRank}
+              nick={`${user?.nick || 'Tu'} (TU)`}
+              pts={Number(funnies || 0)}
+              funnies={Number(funnies || 0)}
+              delta={0}
+              me
+            />
           </>
         )}
       </div>

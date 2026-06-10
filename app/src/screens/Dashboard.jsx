@@ -10,7 +10,8 @@ import { CONTESTS } from '../lib/contests.js';
 import { useUpcomingForLeagues } from '../hooks/useEvents.js';
 import { formatMatchDate, formatCountdown } from '../lib/format.js';
 
-const TOP_LEADERS = [
+// Demo mostrata SOLO quando Supabase non è configurato (repo in anteprima).
+const DEMO_LEADERS = [
   { n: 1, nick: 'CP72',         pts: 9195, delta: 0 },
   { n: 2, nick: 'ValerioLazio', pts: 9147, delta: 0 },
   { n: 3, nick: 'emricci',      pts: 9089, delta: 1 },
@@ -23,10 +24,42 @@ function contestForEvent(e) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { funnies, user, listMyBets, isSupabaseConfigured, isAuthed } = useApp();
+  const {
+    funnies, user, listMyBets, isSupabaseConfigured, isAuthed,
+    myRank, globalLeaderboard, monthlyChallenge,
+  } = useApp();
 
   const leagueIds = useMemo(() => CONTESTS.map((c) => c.league.id), []);
   const { data: events, loading } = useUpcomingForLeagues(leagueIds, 3);
+
+  // Numeri reali: posizione/guadagno settimana, top 3 classifica, sfida mese.
+  const [rankInfo, setRankInfo] = useState(null);
+  const [leaders, setLeaders] = useState(null);
+  const [challenge, setChallenge] = useState(null);
+  useEffect(() => {
+    if (!isSupabaseConfigured || !isAuthed) return;
+    let alive = true;
+    myRank().then((r) => { if (alive) setRankInfo(r); }).catch(() => {});
+    globalLeaderboard()
+      .then((rows) => {
+        if (!alive || !Array.isArray(rows)) return;
+        setLeaders(rows.slice(0, 3).map((r, i) => ({
+          n: r.rank ?? i + 1,
+          nick: r.nick,
+          pts: Number(r.funnies ?? 0),
+          delta: 0,
+          me: !!r.is_me,
+        })));
+      })
+      .catch(() => {});
+    monthlyChallenge().then((c) => { if (alive) setChallenge(c); }).catch(() => {});
+    return () => { alive = false; };
+  }, [isSupabaseConfigured, isAuthed, myRank, globalLeaderboard, monthlyChallenge]);
+
+  const topLeaders = isSupabaseConfigured ? (leaders || []) : DEMO_LEADERS;
+  const challengePool = isSupabaseConfigured
+    ? (challenge ? Number(challenge.prize_pool) : null)
+    : 120000;
 
   // Notifiche: carico le schedine dell'utente per costruire il pannello
   // (schedine aperte da gestire + ultime vincite). È un dato leggero che
@@ -134,10 +167,13 @@ export default function Dashboard() {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Icon name="arrowU" size={14} /> +2.430 questa sett.
+              <Icon name="arrowU" size={14} />
+              {rankInfo
+                ? `+${Number(rankInfo.weekly_gain).toLocaleString('it-IT')} questa sett.`
+                : '+0 questa sett.'}
             </div>
             <div style={{ opacity: 0.6 }}>|</div>
-            <div>Pos #247</div>
+            <div>{rankInfo?.rank ? `Pos #${rankInfo.rank}` : 'Pos —'}</div>
           </div>
         </div>
       </div>
@@ -155,7 +191,7 @@ export default function Dashboard() {
           onClick={() => navigate('/pronostici')}
           icon="bolt"
           label="Pronostica"
-          sub="3 concorsi aperti"
+          sub="Concorsi gratuiti"
           accent
         />
         <QuickAction
@@ -184,7 +220,11 @@ export default function Dashboard() {
           onClick={() => navigate('/sfida')}
           icon="flame"
           label="Sfida mese"
-          sub="120.000 in palio"
+          sub={
+            challengePool != null
+              ? `${challengePool.toLocaleString('it-IT')} in palio`
+              : 'Montepremi mensile'
+          }
         />
       </div>
 
@@ -303,7 +343,7 @@ export default function Dashboard() {
               lineHeight: 1,
             }}
           >
-            10
+            {challenge?.month ?? ''}
           </div>
           <div
             style={{
@@ -326,12 +366,16 @@ export default function Dashboard() {
               lineHeight: 1.1,
             }}
           >
-            10 manches,
+            {challengePool != null
+              ? `${challengePool.toLocaleString('it-IT')} Funnies`
+              : 'Montepremi mensile'}
             <br />
-            120.000 Funnies in palio.
+            in palio questo mese.
           </div>
           <div style={{ marginTop: 14, fontSize: 13, color: 'rgba(245,246,250,0.7)' }}>
-            Hai pronosticato 4/10 · 72º posto
+            {challenge && Number(challenge.my_points) > 0
+              ? `Hai ${Number(challenge.my_points).toLocaleString('it-IT')} punti · ${challenge.my_rank}º su ${challenge.participants}`
+              : 'Gioca una schedina per entrare in classifica.'}
           </div>
           <div
             style={{
@@ -344,7 +388,12 @@ export default function Dashboard() {
           >
             <div
               style={{
-                width: '40%',
+                // Avanzamento = i tuoi punti rispetto al leader del mese.
+                width: `${(() => {
+                  const lead = Number(challenge?.leaderboard?.[0]?.points) || 0;
+                  const mine = Number(challenge?.my_points) || 0;
+                  return lead > 0 ? Math.min(100, Math.round((mine / lead) * 100)) : 0;
+                })()}%`,
                 height: '100%',
                 background: '#FFDD2E',
                 borderRadius: 3,
@@ -378,7 +427,12 @@ export default function Dashboard() {
         onAction={() => navigate('/classifiche')}
       />
       <div style={{ padding: '0 22px 30px' }}>
-        {TOP_LEADERS.map((p) => (
+        {topLeaders.length === 0 && (
+          <div style={{ color: 'rgba(245,246,250,0.5)', fontSize: 13 }}>
+            Ancora nessun giocatore in classifica.
+          </div>
+        )}
+        {topLeaders.map((p) => (
           <LeaderRow key={p.n} {...p} />
         ))}
       </div>
