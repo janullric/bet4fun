@@ -19,6 +19,7 @@ export default function Gruppi() {
     groupLeaderboard,
     leaveGroup,
     groupRoundBets,
+    groupLeagueStandings,
   } = useApp();
 
   const [groups, setGroups] = useState([]);
@@ -28,6 +29,8 @@ export default function Gruppi() {
   const [leaderboard, setLeaderboard] = useState(null);
   const [boardLoading, setBoardLoading] = useState(false);
   const [groupBets, setGroupBets] = useState(null);
+  const [standings, setStandings] = useState(null);
+  const [boardTab, setBoardTab] = useState('generale'); // 'generale' | leagueId
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -48,6 +51,8 @@ export default function Gruppi() {
     setBoardLoading(true);
     setLeaderboard(null);
     setGroupBets(null);
+    setStandings(null);
+    setBoardTab('generale');
     try {
       const rows = await groupLeaderboard(group.id);
       setLeaderboard(rows);
@@ -57,12 +62,17 @@ export default function Gruppi() {
     } finally {
       setBoardLoading(false);
     }
-    // Schedine dei membri (solo giornate iniziate): caricamento separato,
-    // se fallisce mostriamo comunque la classifica.
+    // Schedine dei membri + classifiche per competizione: caricamenti
+    // separati, se falliscono mostriamo comunque la classifica generale.
     try {
       setGroupBets(await groupRoundBets(group.id));
     } catch {
       setGroupBets([]);
+    }
+    try {
+      setStandings(await groupLeagueStandings(group.id));
+    } catch {
+      setStandings([]);
     }
   };
 
@@ -100,13 +110,62 @@ export default function Gruppi() {
           <div style={{ marginTop: 18, marginBottom: 10, color: 'rgba(245,246,250,0.6)', fontSize: 12, fontFamily: 'JetBrains Mono', textTransform: 'uppercase', letterSpacing: 1 }}>
             Classifica interna
           </div>
+
+          {/* Chip: Generale (Funnies) + una per competizione giocata. */}
+          {standings && standings.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 12 }}>
+              {['generale', ...new Set(standings.map((s) => s.league_id))].map((lid) => {
+                const sel = boardTab === lid;
+                const label = lid === 'generale'
+                  ? 'Generale'
+                  : (findLeagueById(lid)?.label || lid);
+                return (
+                  <button
+                    key={lid}
+                    onClick={() => setBoardTab(lid)}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: 100,
+                      border: 0,
+                      cursor: 'pointer',
+                      background: sel ? '#FFDD2E' : 'rgba(255,255,255,0.06)',
+                      color: sel ? '#0A0F1F' : 'rgba(245,246,250,0.75)',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                      fontFamily: 'Inter',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {boardLoading && <div style={{ color: 'rgba(245,246,250,0.6)', fontSize: 13 }}>Carico…</div>}
-          {!boardLoading && leaderboard && leaderboard.length === 0 && (
+
+          {boardTab === 'generale' && !boardLoading && leaderboard && leaderboard.length === 0 && (
             <div style={{ color: 'rgba(245,246,250,0.6)', fontSize: 13 }}>Ancora nessun membro. Condividi il codice!</div>
           )}
-          {!boardLoading && leaderboard && leaderboard.map((row, i) => (
+          {boardTab === 'generale' && !boardLoading && leaderboard && leaderboard.map((row, i) => (
             <GroupLeaderRow key={i} rank={i + 1} {...row} />
           ))}
+
+          {boardTab !== 'generale' && standings && (
+            <>
+              {standings
+                .filter((s) => s.league_id === boardTab)
+                .map((s, i) => (
+                  <StandingRow key={i} rank={i + 1} {...s} />
+                ))}
+              <div style={{ fontSize: 11, color: 'rgba(245,246,250,0.45)', marginTop: 8, lineHeight: 1.5 }}>
+                I punti arrivano dal calcolo ufficiale a fine giornata; le
+                schedine contano da subito.
+              </div>
+            </>
+          )}
 
           <div style={{ marginTop: 22, marginBottom: 10, color: 'rgba(245,246,250,0.6)', fontSize: 12, fontFamily: 'JetBrains Mono', textTransform: 'uppercase', letterSpacing: 1 }}>
             Schedine del gruppo
@@ -371,6 +430,47 @@ function GroupBetCard({ bet }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// Riga della classifica per competizione: punti scoring + schedine giocate.
+function StandingRow({ rank, nick, is_me, points, played }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: 12,
+        marginBottom: 6,
+        background: is_me ? 'rgba(255,221,46,0.08)' : 'rgba(255,255,255,0.02)',
+        border: is_me ? '1px solid rgba(255,221,46,0.25)' : '1px solid rgba(255,255,255,0.04)',
+        borderRadius: 14,
+        color: '#F5F6FA',
+      }}
+    >
+      <div
+        style={{
+          width: 28, height: 28, borderRadius: 8,
+          background: rank <= 3 ? '#FFDD2E' : 'rgba(255,255,255,0.06)',
+          color: rank <= 3 ? '#0A0F1F' : 'rgba(245,246,250,0.7)',
+          fontFamily: 'Space Grotesk', fontWeight: 800, fontSize: 13,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        {rank}
+      </div>
+      <div style={{ flex: 1, fontSize: 14, fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <Link to={`/u/${encodeURIComponent(nick)}`} style={{ color: 'inherit', textDecoration: 'none' }}>{nick}</Link>
+        {is_me && <span style={{ color: '#FFDD2E', marginLeft: 6, fontSize: 11 }}>(tu)</span>}
+      </div>
+      <div style={{ fontSize: 11, color: 'rgba(245,246,250,0.5)', fontFamily: 'JetBrains Mono', flexShrink: 0 }}>
+        {played} sched.
+      </div>
+      <div style={{ color: '#4C7DFF', fontFamily: 'JetBrains Mono', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
+        {points} pt
       </div>
     </div>
   );

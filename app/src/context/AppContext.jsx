@@ -179,6 +179,17 @@ export function AppProvider({ children }) {
     return data || [];
   }, []);
 
+  // Classifica del gruppo per singola competizione (punti del motore di
+  // scoring + numero di schedine giocate, raggruppati per lega).
+  const groupLeagueStandings = useCallback(async (groupId) => {
+    if (!supabase) return [];
+    const { data, error } = await supabase.rpc('group_league_standings', {
+      p_group_id: groupId,
+    });
+    if (error) throw error;
+    return data || [];
+  }, []);
+
   // Lead Boost — campagne consenso esplicito.
   const listLeadCampaigns = useCallback(async () => {
     if (!supabase) return [];
@@ -462,6 +473,7 @@ export function AppProvider({ children }) {
     groupLeaderboard,
     leaveGroup,
     groupRoundBets,
+    groupLeagueStandings,
     listLeadCampaigns,
     submitLead,
     getPublicProfile,
