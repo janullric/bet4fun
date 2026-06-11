@@ -168,6 +168,17 @@ export function AppProvider({ children }) {
     if (error) throw error;
   }, []);
 
+  // Schedine dei membri del gruppo: il server le espone solo per le
+  // giornate già iniziate (anti-copia pre-kickoff).
+  const groupRoundBets = useCallback(async (groupId) => {
+    if (!supabase) return [];
+    const { data, error } = await supabase.rpc('group_round_bets', {
+      p_group_id: groupId,
+    });
+    if (error) throw error;
+    return data || [];
+  }, []);
+
   // Lead Boost — campagne consenso esplicito.
   const listLeadCampaigns = useCallback(async () => {
     if (!supabase) return [];
@@ -450,6 +461,7 @@ export function AppProvider({ children }) {
     joinGroupByCode,
     groupLeaderboard,
     leaveGroup,
+    groupRoundBets,
     listLeadCampaigns,
     submitLead,
     getPublicProfile,

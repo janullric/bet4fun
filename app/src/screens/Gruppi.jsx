@@ -4,6 +4,8 @@ import Screen from '../components/Screen.jsx';
 import Icon from '../components/Icon.jsx';
 import Funnie from '../components/Funnie.jsx';
 import { useApp } from '../context/AppContext.jsx';
+import { findLeagueById } from '../lib/sportsApi.js';
+import { formatMatchDate } from '../lib/format.js';
 
 // Schermata gruppi: lista dei miei gruppi + creazione + join via codice +
 // drill-down alla classifica interna. Tutta la logica è nei wrapper RPC;
@@ -16,6 +18,7 @@ export default function Gruppi() {
     joinGroupByCode,
     groupLeaderboard,
     leaveGroup,
+    groupRoundBets,
   } = useApp();
 
   const [groups, setGroups] = useState([]);
@@ -24,6 +27,7 @@ export default function Gruppi() {
   const [mode, setMode] = useState(null); // 'create' | 'join' | { detail: group }
   const [leaderboard, setLeaderboard] = useState(null);
   const [boardLoading, setBoardLoading] = useState(false);
+  const [groupBets, setGroupBets] = useState(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -43,6 +47,7 @@ export default function Gruppi() {
     setMode({ detail: group });
     setBoardLoading(true);
     setLeaderboard(null);
+    setGroupBets(null);
     try {
       const rows = await groupLeaderboard(group.id);
       setLeaderboard(rows);
@@ -51,6 +56,13 @@ export default function Gruppi() {
       setError(e?.message || 'Errore nel caricare la classifica.');
     } finally {
       setBoardLoading(false);
+    }
+    // Schedine dei membri (solo giornate iniziate): caricamento separato,
+    // se fallisce mostriamo comunque la classifica.
+    try {
+      setGroupBets(await groupRoundBets(group.id));
+    } catch {
+      setGroupBets([]);
     }
   };
 
@@ -94,6 +106,23 @@ export default function Gruppi() {
           )}
           {!boardLoading && leaderboard && leaderboard.map((row, i) => (
             <GroupLeaderRow key={i} rank={i + 1} {...row} />
+          ))}
+
+          <div style={{ marginTop: 22, marginBottom: 10, color: 'rgba(245,246,250,0.6)', fontSize: 12, fontFamily: 'JetBrains Mono', textTransform: 'uppercase', letterSpacing: 1 }}>
+            Schedine del gruppo
+          </div>
+          <div style={{ fontSize: 12, color: 'rgba(245,246,250,0.45)', marginBottom: 10, lineHeight: 1.5 }}>
+            I pronostici dei membri compaiono qui quando la giornata inizia:
+            prima del kickoff nessuno può sbirciare. 😉
+          </div>
+          {groupBets == null && <div style={{ color: 'rgba(245,246,250,0.6)', fontSize: 13 }}>Carico…</div>}
+          {groupBets && groupBets.length === 0 && (
+            <div style={{ color: 'rgba(245,246,250,0.6)', fontSize: 13 }}>
+              Ancora nessuna schedina visibile: aspetta l'inizio della prossima giornata.
+            </div>
+          )}
+          {groupBets && groupBets.map((b, i) => (
+            <GroupBetCard key={i} bet={b} />
           ))}
         </div>
         <div style={{ padding: '0 22px 30px' }}>
@@ -262,6 +291,87 @@ function InviteCard({ code }) {
       >
         {copied ? 'Copiato!' : 'Copia'}
       </button>
+    </div>
+  );
+}
+
+// Etichetta leggibile per un pick: "1 / X / 2" per i match, "P1 nome" per
+// i pick gara (formato "p{N}:{id}").
+function pickLabel(outcome) {
+  const race = /^p(\d+):(.+)$/.exec(outcome || '');
+  if (race) return `P${race[1]} ${race[2].toUpperCase()}`;
+  return outcome;
+}
+
+function GroupBetCard({ bet }) {
+  const league = findLeagueById(bet.league_id);
+  const picks = Array.isArray(bet.picks) ? bet.picks : [];
+  return (
+    <div
+      style={{
+        background: bet.is_me ? 'rgba(255,221,46,0.05)' : '#111830',
+        border: bet.is_me ? '1px solid rgba(255,221,46,0.2)' : '1px solid rgba(255,255,255,0.04)',
+        borderRadius: 16,
+        padding: 14,
+        marginBottom: 10,
+        color: '#F5F6FA',
+        fontFamily: 'Inter',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>
+          {bet.nick}
+          {bet.is_me && <span style={{ color: '#FFDD2E', marginLeft: 5, fontSize: 11 }}>(tu)</span>}
+          <span style={{ color: 'rgba(245,246,250,0.5)', fontWeight: 500, marginLeft: 8, fontSize: 12 }}>
+            {league?.label || bet.league_id} · {league?.sport === 'football' ? `${bet.round}ª giornata` : `Turno ${bet.round}`}
+          </span>
+        </div>
+        <div
+          style={{
+            fontSize: 11,
+            fontFamily: 'JetBrains Mono',
+            color: bet.settled ? '#FFDD2E' : 'rgba(245,246,250,0.5)',
+          }}
+        >
+          {bet.settled ? `${bet.points} pt` : 'in corso'}
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {picks.map((p, i) => {
+          const single = !p.away || p.away === '-';
+          const ok = p.pts != null && p.pts > 0;
+          const ko = bet.settled && (p.pts == null || p.pts === 0);
+          return (
+            <div
+              key={i}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 12,
+                padding: '6px 10px',
+                background: 'rgba(255,255,255,0.03)',
+                borderRadius: 8,
+              }}
+            >
+              <span style={{ color: 'rgba(245,246,250,0.75)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {p.home == null ? 'Partita' : single ? p.home : `${p.home} – ${p.away}`}
+              </span>
+              <span
+                style={{
+                  fontFamily: 'JetBrains Mono',
+                  fontWeight: 700,
+                  flexShrink: 0,
+                  color: ok ? '#3DDC97' : ko ? '#FF5A6A' : '#FFDD2E',
+                }}
+              >
+                {pickLabel(p.outcome)} {ok ? '✓' : ko ? '✗' : ''}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
