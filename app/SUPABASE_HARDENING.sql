@@ -71,6 +71,19 @@ drop policy if exists "schedule admin write" on public.round_schedule;
 create policy "schedule admin write" on public.round_schedule
   for all using (public.is_admin()) with check (public.is_admin());
 
+-- 9) Lock di due funzioni che muovono Funnies e NON devono essere esposte:
+--    • _distribute_pool: helper interno con SQL dinamico (chiamato da
+--      admin_close_month/season). Richiamabile dall'esterno = arbitrary SQL.
+--    • settle_duels: regola la posta delle sfide (chiamata da admin_close_round).
+--    Le chiamate interne (da funzioni SECURITY DEFINER owner=postgres) restano
+--    valide perché girano coi privilegi del proprietario.
+revoke execute on function public._distribute_pool(bigint, text, text, text) from public, anon, authenticated;
+revoke execute on function public.settle_duels(text, int) from public, anon, authenticated;
+-- settle_duels ha anche una guardia is_admin interna (difesa in profondità).
+
+-- 10) Backstop: nessun EXECUTE ereditato da PUBLIC sulle future funzioni.
+alter default privileges in schema public revoke execute on functions from public;
+
 -- ================================================================
 -- NOTA: una segnalazione non risolvibile via SQL:
 --   "Leaked password protection disabled"
