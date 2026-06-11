@@ -7,6 +7,7 @@ import { formatMatchDate, formatCountdown } from '../lib/format.js';
 import { useCurrentRoundByLeague } from '../hooks/useEvents.js';
 import { useApp } from '../context/AppContext.jsx';
 import { F1_DRIVERS, F1_POSITIONS, classifyF1Event } from '../lib/f1.js';
+import { MOTOGP_RIDERS } from '../lib/motogp.js';
 
 // UI F1 dedicata: per ogni sessione pronosticabile (Qualifica + Gara del
 // weekend corrente) l'utente sceglie le prime 5 posizioni. Ogni posizione
@@ -20,6 +21,9 @@ export default function SchedinaF1({ contest }) {
   const { data: roundData, loading, error } = useCurrentRoundByLeague(contest?.league || null);
   const allEvents = roundData?.events || [];
   const roundNumber = roundData?.round;
+
+  // Stessa UI per F1 e MotoGP, ma ognuno con la propria griglia piloti.
+  const ROSTER = contest?.key === 'motogp' ? MOTOGP_RIDERS : F1_DRIVERS;
 
   // Filtra gli eventi pronosticabili (qualifica + gara) e annota il tipo.
   const sessions = useMemo(() => {
@@ -450,7 +454,7 @@ export default function SchedinaF1({ contest }) {
                       }}
                     >
                       <option value="">Scegli pilota…</option>
-                      {F1_DRIVERS.map((d) => (
+                      {ROSTER.map((d) => (
                         <option key={d.id} value={d.id} style={{ background: '#0A0F1F' }}>
                           {d.name} — {d.team}
                         </option>

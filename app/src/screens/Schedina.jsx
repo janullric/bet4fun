@@ -35,6 +35,11 @@ const OUTCOMES_12 = [
   { id: '1', label: '1', desc: 'Casa' },
   { id: '2', label: '2', desc: 'Trasferta' },
 ];
+// UFC/fighting: niente pareggio, angolo rosso vs angolo blu.
+const OUTCOMES_FIGHT = [
+  { id: '1', label: '1', desc: 'Rosso' },
+  { id: '2', label: '2', desc: 'Blu' },
+];
 
 export default function Schedina() {
   const navigate = useNavigate();
@@ -50,7 +55,11 @@ export default function Schedina() {
     return <SchedinaCycling contest={contest} />;
   }
 
-  const OUTCOMES = contest?.league.pickType === '12' ? OUTCOMES_12 : OUTCOMES_1X2;
+  const OUTCOMES = contest?.league.pickType === '12'
+    ? OUTCOMES_12
+    : contest?.league.pickType === 'UFC'
+      ? OUTCOMES_FIGHT
+      : OUTCOMES_1X2;
   const outcomesGrid = OUTCOMES.length === 3 ? '1fr 1fr 1fr' : '1fr 1fr';
 
   const {
