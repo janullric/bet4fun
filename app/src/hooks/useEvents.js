@@ -9,17 +9,33 @@ import {
 
 // Hook generico per sorgenti async. Evita stato inconsistente in caso di
 // unmount con un flag local.
-function useAsync(run, deps) {
+function useAsync(run, deps, refreshOnFocus = false) {
   const [state, setState] = useState({ data: null, loading: true, error: null });
 
   useEffect(() => {
     let alive = true;
-    setState((s) => ({ ...s, loading: true, error: null }));
-    run()
-      .then((data) => alive && setState({ data, loading: false, error: null }))
-      .catch((error) => alive && setState({ data: null, loading: false, error }));
+    const fetchOnce = (showLoading) => {
+      if (showLoading) setState((s) => ({ ...s, loading: true, error: null }));
+      run()
+        .then((data) => alive && setState({ data, loading: false, error: null }))
+        .catch((error) => alive && setState((s) => ({ ...s, loading: false, error })));
+    };
+    fetchOnce(true);
+
+    // Riaggiorna quando l'utente torna sulla scheda (es. montepremi/iscritti
+    // che nel frattempo sono cambiati), senza mostrare lo spinner.
+    let onFocus;
+    if (refreshOnFocus && typeof document !== 'undefined') {
+      onFocus = () => { if (document.visibilityState === 'visible') fetchOnce(false); };
+      document.addEventListener('visibilitychange', onFocus);
+      window.addEventListener('focus', onFocus);
+    }
     return () => {
       alive = false;
+      if (onFocus) {
+        document.removeEventListener('visibilitychange', onFocus);
+        window.removeEventListener('focus', onFocus);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
@@ -46,7 +62,8 @@ export function useEvent(eventId) {
 
 export function useCurrentRoundsForLeagues(leagueIds) {
   const key = leagueIds.join(',');
-  return useAsync(() => fetchCurrentRoundsForLeagues(leagueIds), [key]);
+  // refreshOnFocus: il montepremi/iscritti si riaggiorna al ritorno sulla pagina.
+  return useAsync(() => fetchCurrentRoundsForLeagues(leagueIds), [key], true);
 }
 
 export function useCurrentRoundByLeague(leagueOrId) {
