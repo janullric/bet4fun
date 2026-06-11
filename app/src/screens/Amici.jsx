@@ -3,17 +3,34 @@ import { useNavigate } from 'react-router-dom';
 import Screen from '../components/Screen.jsx';
 import Funnie from '../components/Funnie.jsx';
 import { useApp } from '../context/AppContext.jsx';
+import { supabase } from '../lib/supabase.js';
 import { CONTESTS } from '../lib/contests.js';
 import { findLeagueById } from '../lib/sportsApi.js';
+import { formatLastSeen } from '../lib/format.js';
+
+// Pallino verde (online) o ultima connessione.
+function PresenceDot({ online }) {
+  return (
+    <span
+      title={online ? 'Online' : 'Offline'}
+      style={{
+        width: 9, height: 9, borderRadius: '50%', flexShrink: 0,
+        background: online ? '#3DDC97' : 'rgba(245,246,250,0.25)',
+        boxShadow: online ? '0 0 6px #3DDC97' : 'none',
+      }}
+    />
+  );
+}
 
 // Amici: richieste, lista, chat privata 1:1 e sfide 1v1 con posta in Funnies.
 export default function Amici() {
   const navigate = useNavigate();
   const {
-    isSupabaseConfigured, funnies,
+    isSupabaseConfigured, funnies, session,
     sendFriendRequest, respondFriendRequest, listFriends,
     sendDm, listDm, myUnreadDm,
     createDuel, respondDuel, listMyDuels,
+    isUserOnline,
   } = useApp();
 
   const [friends, setFriends] = useState([]);
@@ -75,6 +92,8 @@ export default function Amici() {
     return (
       <ChatView
         friend={chatWith}
+        myId={session?.user?.id}
+        online={isUserOnline ? isUserOnline(chatWith.friend_id) : false}
         onBack={() => { setChatWith(null); refresh(); }}
         listDm={listDm}
         sendDm={sendDm}
@@ -150,20 +169,29 @@ export default function Amici() {
             Nessun amico ancora: aggiungine uno col suo nickname.
           </div>
         )}
-        {accepted.map((f) => (
-          <Row key={f.friendship_id}>
-            <span style={{ flex: 1, fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {f.nick}
-              {unread[f.friend_id] > 0 && (
-                <span style={{ marginLeft: 8, background: '#FF5A6A', color: '#fff', borderRadius: 100, fontSize: 10, padding: '2px 7px', fontWeight: 700 }}>
-                  {unread[f.friend_id]}
+        {accepted.map((f) => {
+          const online = isUserOnline ? isUserOnline(f.friend_id) : false;
+          return (
+            <Row key={f.friendship_id}>
+              <PresenceDot online={online} />
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.nick}</span>
+                  {unread[f.friend_id] > 0 && (
+                    <span style={{ background: '#FF5A6A', color: '#fff', borderRadius: 100, fontSize: 10, padding: '2px 7px', fontWeight: 700, flexShrink: 0 }}>
+                      {unread[f.friend_id]}
+                    </span>
+                  )}
                 </span>
-              )}
-            </span>
-            <button onClick={() => setChatWith(f)} style={btnSmall('#4C7DFF')}>💬 Chat</button>
-            <button onClick={() => setDuelWith(duelWith?.nick === f.nick ? null : f)} style={btnSmall('#FFDD2E')}>⚔️ Sfida</button>
-          </Row>
-        ))}
+                <span style={{ fontSize: 11, color: online ? '#3DDC97' : 'rgba(245,246,250,0.45)', fontFamily: 'JetBrains Mono' }}>
+                  {online ? 'online' : `ultima connessione ${formatLastSeen(f.last_seen)}`}
+                </span>
+              </span>
+              <button onClick={() => setChatWith(f)} style={btnSmall('#4C7DFF')}>💬 Chat</button>
+              <button onClick={() => setDuelWith(duelWith?.nick === f.nick ? null : f)} style={btnSmall('#FFDD2E')}>⚔️ Sfida</button>
+            </Row>
+          );
+        })}
 
         {duelWith && (
           <DuelForm
@@ -238,11 +266,15 @@ export default function Amici() {
   );
 }
 
-function ChatView({ friend, onBack, listDm, sendDm }) {
+function ChatView({ friend, myId, online, onBack, listDm, sendDm }) {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [theyTyping, setTheyTyping] = useState(false);
   const endRef = useRef(null);
+  const chanRef = useRef(null);
+  const typingTimer = useRef(null);
+  const lastSent = useRef(0);
 
   const load = useCallback(async () => {
     try { setMessages(await listDm(friend.friend_id)); } catch { /* noop */ }
@@ -250,11 +282,42 @@ function ChatView({ friend, onBack, listDm, sendDm }) {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 8000); // polling leggero
+    const t = setInterval(load, 5000); // polling leggero per i nuovi messaggi
     return () => clearInterval(t);
   }, [load]);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  // Canale Realtime per conversazione: broadcast "sta scrivendo" + ping
+  // per ricaricare i messaggi appena l'altro invia (consegna quasi istantanea).
+  useEffect(() => {
+    if (!supabase || !myId || !friend.friend_id) return undefined;
+    const room = `dm:${[myId, friend.friend_id].sort().join(':')}`;
+    const ch = supabase.channel(room, { config: { broadcast: { self: false } } });
+    ch.on('broadcast', { event: 'typing' }, ({ payload }) => {
+      if (payload?.from === friend.friend_id) {
+        setTheyTyping(true);
+        clearTimeout(typingTimer.current);
+        typingTimer.current = setTimeout(() => setTheyTyping(false), 2500);
+      }
+    });
+    ch.on('broadcast', { event: 'msg' }, ({ payload }) => {
+      if (payload?.from === friend.friend_id) { setTheyTyping(false); load(); }
+    });
+    ch.subscribe();
+    chanRef.current = ch;
+    return () => { clearTimeout(typingTimer.current); supabase.removeChannel(ch); chanRef.current = null; };
+  }, [myId, friend.friend_id, load]);
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, theyTyping]);
+
+  // Notifica "sto scrivendo" all'altro (max 1 broadcast/secondo).
+  const onType = (val) => {
+    setDraft(val);
+    const now = Date.now();
+    if (chanRef.current && now - lastSent.current > 1000) {
+      lastSent.current = now;
+      chanRef.current.send({ type: 'broadcast', event: 'typing', payload: { from: myId } });
+    }
+  };
 
   const send = async () => {
     const body = draft.trim();
@@ -263,14 +326,31 @@ function ChatView({ friend, onBack, listDm, sendDm }) {
     try {
       await sendDm(friend.friend_id, body);
       setDraft('');
+      // Avvisa l'altro di ricaricare subito (consegna quasi istantanea).
+      chanRef.current?.send({ type: 'broadcast', event: 'msg', payload: { from: myId } });
       await load();
     } catch { /* il testo resta nel campo */ } finally {
       setSending(false);
     }
   };
 
+  const subtitle = theyTyping
+    ? `${friend.nick} sta scrivendo…`
+    : online ? 'online' : 'Chat privata';
+
   return (
-    <Screen title={friend.nick} subtitle="Chat privata" onBack={onBack}>
+    <Screen
+      title={friend.nick}
+      subtitle={
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <PresenceDot online={online} />
+          <span style={{ color: theyTyping ? '#3DDC97' : (online ? '#3DDC97' : 'rgba(245,246,250,0.6)') }}>
+            {subtitle}
+          </span>
+        </span>
+      }
+      onBack={onBack}
+    >
       <div style={{ padding: '0 22px 16px', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 200 }}>
         {messages.length === 0 && (
           <div style={{ color: 'rgba(245,246,250,0.5)', fontSize: 13 }}>
@@ -295,12 +375,17 @@ function ChatView({ friend, onBack, listDm, sendDm }) {
             {m.body}
           </div>
         ))}
+        {theyTyping && (
+          <div style={{ alignSelf: 'flex-start', color: 'rgba(245,246,250,0.55)', fontSize: 12, fontStyle: 'italic', padding: '2px 4px' }}>
+            {friend.nick} sta scrivendo…
+          </div>
+        )}
         <div ref={endRef} />
       </div>
       <div style={{ padding: '0 22px 30px', display: 'flex', gap: 8 }}>
         <input
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => onType(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
           maxLength={500}
           placeholder="Scrivi un messaggio…"

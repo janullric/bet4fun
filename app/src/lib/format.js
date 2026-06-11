@@ -23,6 +23,23 @@ export function formatMatchDate(iso) {
   return `${d.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })} ${time}`;
 }
 
+// "Ultima connessione" relativa: "ora", "5 min fa", "2 ore fa", "ieri", data.
+export function formatLastSeen(iso) {
+  if (!iso) return 'mai';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const diff = Date.now() - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'poco fa';
+  if (mins < 60) return `${mins} min fa`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} ${hrs === 1 ? 'ora' : 'ore'} fa`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return 'ieri';
+  if (days < 7) return `${days} giorni fa`;
+  return d.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' });
+}
+
 // Tempo residuo compatto: "2g 4h", "5h 20m", "32m".
 export function formatCountdown(iso) {
   if (!iso) return '';

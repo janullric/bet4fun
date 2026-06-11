@@ -117,6 +117,45 @@ export function AppProvider({ children }) {
     : DEMO_USER;
   const funnies = profile?.funnies ?? (session ? 0 : DEMO_FUNNIES);
 
+  // ── Presenza in tempo reale (chi è online) ──────────────────────────
+  // Canale Supabase Realtime "presence": ogni utente loggato si registra,
+  // e tutti vedono in tempo reale chi è connesso (pallino verde).
+  const [onlineIds, setOnlineIds] = useState(() => new Set());
+  useEffect(() => {
+    if (!supabase || !session?.user) { setOnlineIds(new Set()); return undefined; }
+    const myId = session.user.id;
+    const channel = supabase.channel('presence:online', {
+      config: { presence: { key: myId } },
+    });
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        setOnlineIds(new Set(Object.keys(channel.presenceState())));
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ at: new Date().toISOString() });
+        }
+      });
+    return () => { supabase.removeChannel(channel); };
+  }, [session?.user?.id]);
+
+  // Heartbeat "ultima connessione": aggiorna last_seen_at finché l'app è
+  // aperta e in primo piano (ogni 60s + al ritorno sulla scheda).
+  useEffect(() => {
+    if (!supabase || !session?.user) return undefined;
+    const ping = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      supabase.rpc('touch_presence').then(() => {}, () => {});
+    };
+    ping();
+    const iv = setInterval(ping, 60000);
+    const onVis = () => { if (document.visibilityState === 'visible') ping(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVis); };
+  }, [session?.user?.id]);
+
+  const isUserOnline = useCallback((id) => onlineIds.has(id), [onlineIds]);
+
   // Invia una schedina: la RPC `submit_bet` gira su Supabase come
   // `security definer` dentro una singola transazione. Scrive i pick, accredita
   // i funnies al profilo e ci restituisce il nuovo saldo. Qui poi aggiorniamo
@@ -608,6 +647,8 @@ export function AppProvider({ children }) {
     adminCloseMonth,
     adminCloseSeason,
     updatePreferences,
+    onlineIds,
+    isUserOnline,
     listLeadCampaigns,
     submitLead,
     getPublicProfile,
