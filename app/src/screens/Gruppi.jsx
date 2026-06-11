@@ -24,6 +24,7 @@ export default function Gruppi() {
     setGroupStake,
     addBetComment,
     listGroupComments,
+    sendFriendRequest,
   } = useApp();
 
   const [groups, setGroups] = useState([]);
@@ -176,7 +177,7 @@ export default function Gruppi() {
             <div style={{ color: 'rgba(245,246,250,0.6)', fontSize: 13 }}>Ancora nessun membro. Condividi il codice!</div>
           )}
           {boardTab === 'generale' && !boardLoading && leaderboard && leaderboard.map((row, i) => (
-            <GroupLeaderRow key={i} rank={i + 1} {...row} />
+            <GroupLeaderRow key={i} rank={i + 1} {...row} onAddFriend={sendFriendRequest} />
           ))}
 
           {boardTab !== 'generale' && standings && (
@@ -695,7 +696,19 @@ function StandingRow({ rank, nick, is_me, points, played }) {
   );
 }
 
-function GroupLeaderRow({ rank, nick, funnies, is_me }) {
+function GroupLeaderRow({ rank, nick, funnies, is_me, onAddFriend }) {
+  // 'idle' | 'sent' | 'friends' | 'error:<msg>'
+  const [friendStatus, setFriendStatus] = useState('idle');
+  const addFriend = async (e) => {
+    e.preventDefault();
+    try {
+      const out = await onAddFriend(nick);
+      setFriendStatus(out === 'accepted' ? 'friends' : 'sent');
+    } catch (err) {
+      const m = err?.message || '';
+      setFriendStatus(m.includes('già amici') ? 'friends' : `error:${m || 'Errore'}`);
+    }
+  };
   return (
     <div
       style={{
@@ -725,6 +738,34 @@ function GroupLeaderRow({ rank, nick, funnies, is_me }) {
         <Link to={`/u/${encodeURIComponent(nick)}`} style={{ color: 'inherit', textDecoration: 'none' }}>{nick}</Link>
         {is_me && <span style={{ color: '#FFDD2E', marginLeft: 6, fontSize: 11 }}>(tu)</span>}
       </div>
+      {!is_me && onAddFriend && (
+        friendStatus === 'idle' ? (
+          <button
+            onClick={addFriend}
+            title={`Aggiungi ${nick} come amico`}
+            style={{
+              background: 'rgba(61,220,151,0.12)',
+              border: '1px solid rgba(61,220,151,0.35)',
+              color: '#3DDC97',
+              borderRadius: 10,
+              padding: '5px 10px',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            ➕
+          </button>
+        ) : (
+          <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono', flexShrink: 0,
+            color: friendStatus.startsWith('error') ? '#FF5A6A' : '#3DDC97' }}>
+            {friendStatus === 'sent' ? 'inviata ✓'
+              : friendStatus === 'friends' ? 'amici ✓'
+              : friendStatus.slice(6, 40)}
+          </span>
+        )
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#FFDD2E', fontFamily: 'JetBrains Mono', fontSize: 13 }}>
         <Funnie size={14} /> {funnies.toLocaleString('it-IT')}
       </div>

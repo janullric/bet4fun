@@ -11,11 +11,17 @@ import { useApp } from '../context/AppContext.jsx';
 // funnies totali, posizione globale, ultima connessione, totale pronostici.
 export default function PublicProfile() {
   const { handle } = useParams();
-  const { getPublicProfile, isSupabaseConfigured } = useApp();
+  const {
+    getPublicProfile, isSupabaseConfigured, user,
+    sendFriendRequest, listFriends,
+  } = useApp();
 
   const [data, setData]   = useState(null);
   const [loading, setLoad] = useState(true);
   const [err, setErr]     = useState(null);
+  // Stato amicizia con questo utente: null | 'amico' | 'inviata' | 'ricevuta'
+  const [friendState, setFriendState] = useState(null);
+  const [friendMsg, setFriendMsg] = useState(null);
 
   useEffect(() => {
     if (!isSupabaseConfigured) { setLoad(false); return; }
@@ -25,8 +31,26 @@ export default function PublicProfile() {
       .then((row) => { if (alive) { setData(row); setErr(row ? null : 'Profilo non trovato.'); } })
       .catch((e) => { if (alive) setErr(e?.message || 'Errore.'); })
       .finally(() => { if (alive) setLoad(false); });
+    listFriends()
+      .then((rows) => {
+        if (!alive) return;
+        const mine = (rows || []).find((f) => f.nick?.toLowerCase() === String(handle).toLowerCase());
+        setFriendState(mine?.state || null);
+      })
+      .catch(() => {});
     return () => { alive = false; };
-  }, [handle, getPublicProfile, isSupabaseConfigured]);
+  }, [handle, getPublicProfile, listFriends, isSupabaseConfigured]);
+
+  const addFriend = async () => {
+    setFriendMsg(null);
+    try {
+      const out = await sendFriendRequest(handle);
+      setFriendState(out === 'accepted' ? 'amico' : 'inviata');
+      setFriendMsg(out === 'accepted' ? 'Siete amici! 🎉' : 'Richiesta inviata ✓');
+    } catch (e) {
+      setFriendMsg(e?.message || 'Errore.');
+    }
+  };
 
   if (!isSupabaseConfigured) {
     return (
@@ -97,6 +121,48 @@ export default function PublicProfile() {
           )}
         </div>
       </div>
+
+      {/* aggiungi amico (nascosto sul proprio profilo) */}
+      {user?.nick?.toLowerCase() !== String(data.nick).toLowerCase() && (
+        <div style={{ padding: '0 22px 22px' }}>
+          {friendState === 'amico' ? (
+            <div style={{ color: '#3DDC97', fontSize: 13, fontWeight: 600 }}>
+              ✓ Siete amici — trovalo nella sezione Amici per chat e sfide.
+            </div>
+          ) : friendState === 'inviata' ? (
+            <div style={{ color: 'rgba(245,246,250,0.6)', fontSize: 13 }}>
+              Richiesta di amicizia inviata: in attesa di risposta…
+            </div>
+          ) : friendState === 'ricevuta' ? (
+            <div style={{ color: '#FFDD2E', fontSize: 13 }}>
+              Ti ha chiesto l'amicizia! Vai nella sezione <strong>Amici</strong> per accettare.
+            </div>
+          ) : (
+            <button
+              onClick={addFriend}
+              style={{
+                width: '100%',
+                background: '#FFDD2E',
+                color: '#0A0F1F',
+                border: 0,
+                borderRadius: 100,
+                padding: 14,
+                fontFamily: 'Space Grotesk',
+                fontWeight: 700,
+                fontSize: 14,
+                cursor: 'pointer',
+              }}
+            >
+              ➕ Aggiungi amico
+            </button>
+          )}
+          {friendMsg && (
+            <div style={{ marginTop: 8, fontSize: 13, color: friendMsg.includes('✓') || friendMsg.includes('🎉') ? '#3DDC97' : '#FF5A6A' }}>
+              {friendMsg}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* card funnies totali */}
       <div style={{ padding: '0 22px 22px' }}>
