@@ -12,6 +12,9 @@ export function AppProvider({ children }) {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(isSupabaseConfigured);
+  // true quando l'utente arriva dal link "Password dimenticata?": l'app
+  // mostra la schermata per impostare la nuova password.
+  const [recoveryMode, setRecoveryMode] = useState(false);
 
   useEffect(() => {
     if (!supabase) return;
@@ -19,10 +22,27 @@ export function AppProvider({ children }) {
       setSession(data.session);
       setLoadingAuth(false);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s);
+      if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
     });
     return () => sub.subscription.unsubscribe();
+  }, []);
+
+  // Invia la mail di reset password (link torna sul sito → PASSWORD_RECOVERY).
+  const requestPasswordReset = useCallback(async (email) => {
+    if (!supabase) throw new Error('Supabase non configurato');
+    const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    if (error) throw error;
+  }, []);
+
+  // Imposta la nuova password (valido durante recoveryMode o da loggato).
+  const updatePassword = useCallback(async (newPassword) => {
+    if (!supabase) throw new Error('Supabase non configurato');
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+    setRecoveryMode(false);
   }, []);
 
   const refreshProfile = useCallback(async () => {
@@ -546,6 +566,9 @@ export function AppProvider({ children }) {
     signUp,
     signIn,
     signOut,
+    requestPasswordReset,
+    updatePassword,
+    recoveryMode,
     submitBet,
     refreshProfile,
     setConsent,

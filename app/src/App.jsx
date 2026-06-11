@@ -18,6 +18,7 @@ import Admin from './screens/Admin.jsx';
 import Schedine from './screens/Schedine.jsx';
 import Archivio from './screens/Archivio.jsx';
 import Amici from './screens/Amici.jsx';
+import ResetPassword from './screens/ResetPassword.jsx';
 
 function Protected({ children }) {
   const { isAuthed, isSupabaseConfigured, loadingAuth } = useApp();
@@ -31,6 +32,11 @@ function Protected({ children }) {
 
 export default function App() {
   const location = useLocation();
+  const { recoveryMode } = useApp();
+
+  // Arrivo dal link "Password dimenticata?": schermata dedicata, fuori dal
+  // routing normale, così funziona qualunque sia l'URL del link email.
+  if (recoveryMode) return <ResetPassword />;
 
   return (
     <Layout>

@@ -14,7 +14,8 @@ const STEPS = ['Account', 'Preferenze', 'Consensi', 'Pronti'];
 
 export default function Iscrizione() {
   const navigate = useNavigate();
-  const { signUp, signIn, isSupabaseConfigured, nickAvailable } = useApp();
+  const { signUp, signIn, isSupabaseConfigured, nickAvailable, requestPasswordReset } = useApp();
+  const [resetSent, setResetSent] = useState(false);
 
   const [mode, setMode] = useState('signup'); // 'signup' | 'login'
   const [step, setStep] = useState(0);
@@ -42,6 +43,7 @@ export default function Iscrizione() {
 
   const canContinue = () => {
     if (mode === 'login') return data.email && data.password;
+    if (mode === 'recover') return !!data.email.trim();
     if (step === 0) return data.nick.trim() && data.email.trim() && data.password.length >= 6;
     if (step === 2) return !!data.consents.tos;
     return true;
@@ -62,7 +64,27 @@ export default function Iscrizione() {
         await signIn({ email: data.email, password: data.password });
         navigate('/home');
       } catch (e) {
-        setError(e.message || 'Credenziali non valide.');
+        const m = e?.message || '';
+        setError(
+          m.includes('Invalid login credentials')
+            ? 'Email o password errati. Se non ricordi la password usa "Password dimenticata?".'
+            : (m || 'Credenziali non valide.')
+        );
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    if (mode === 'recover') {
+      if (!isSupabaseConfigured) { setError('Supabase non configurato.'); return; }
+      if (!data.email.trim()) { setError('Inserisci la tua email.'); return; }
+      setSubmitting(true);
+      try {
+        await requestPasswordReset(data.email);
+        setResetSent(true);
+      } catch (e) {
+        setError(e?.message || 'Errore nell\'invio della mail.');
       } finally {
         setSubmitting(false);
       }
@@ -208,9 +230,17 @@ export default function Iscrizione() {
                 style={inputStyle}
               />
             </Field>
+            <div style={{ marginTop: 14 }}>
+              <button
+                onClick={() => { setMode('recover'); setError(''); setResetSent(false); }}
+                style={linkBtn}
+              >
+                Password dimenticata?
+              </button>
+            </div>
             <div
               style={{
-                marginTop: 18,
+                marginTop: 14,
                 fontSize: 13,
                 color: 'rgba(245,246,250,0.6)',
               }}
@@ -223,6 +253,49 @@ export default function Iscrizione() {
                 Iscriviti
               </button>
             </div>
+          </>
+        )}
+
+        {mode === 'recover' && (
+          <>
+            <Title>
+              Recupera
+              <br />
+              l'accesso.
+            </Title>
+            {resetSent ? (
+              <>
+                <Subtitle>
+                  Se esiste un account con questa email, ti abbiamo inviato un
+                  link per reimpostare la password. Controlla la posta (anche lo spam).
+                </Subtitle>
+                <button
+                  onClick={() => { setMode('login'); setError(''); setResetSent(false); }}
+                  style={{ ...linkBtn, marginTop: 18 }}
+                >
+                  ← Torna al login
+                </button>
+              </>
+            ) : (
+              <>
+                <Subtitle>Inserisci la tua email: ti mandiamo il link di reset.</Subtitle>
+                <Field label="Email" icon="mail">
+                  <input
+                    value={data.email}
+                    onChange={(e) => setData({ ...data, email: e.target.value })}
+                    placeholder="mario@mail.it"
+                    autoComplete="email"
+                    style={inputStyle}
+                  />
+                </Field>
+                <div style={{ marginTop: 14, fontSize: 13, color: 'rgba(245,246,250,0.6)' }}>
+                  Ti sei ricordato?{' '}
+                  <button onClick={() => { setMode('login'); setError(''); }} style={linkBtn}>
+                    Torna al login
+                  </button>
+                </div>
+              </>
+            )}
           </>
         )}
 
@@ -431,38 +504,43 @@ export default function Iscrizione() {
         )}
       </div>
 
-      <div style={{ padding: '0 22px 30px' }}>
-        <button
-          onClick={onNext}
-          disabled={submitting || !canContinue()}
-          style={{
-            width: '100%',
-            background: canContinue() && !submitting ? '#FFDD2E' : 'rgba(255,255,255,0.08)',
-            color: canContinue() && !submitting ? '#0A0F1F' : 'rgba(245,246,250,0.4)',
-            border: 0,
-            borderRadius: 100,
-            padding: '18px',
-            fontFamily: 'Space Grotesk',
-            fontWeight: 700,
-            fontSize: 16,
-            cursor: canContinue() && !submitting ? 'pointer' : 'not-allowed',
-            boxShadow: canContinue() && !submitting ? '0 8px 24px rgba(255,221,46,0.25)' : 'none',
-            transition: 'all 0.2s',
-          }}
-        >
-          {submitting
-            ? 'Attendi…'
-            : mode === 'login'
-            ? 'Accedi'
-            : step === 0
-            ? 'Continua'
-            : step === 1
-            ? 'Avanti'
-            : step === 2
-            ? 'Accetta e continua'
-            : 'Crea account'}
-        </button>
-      </div>
+      {/* Nel recover dopo invio non serve il bottone (c'è "Torna al login"). */}
+      {!(mode === 'recover' && resetSent) && (
+        <div style={{ padding: '0 22px 30px' }}>
+          <button
+            onClick={onNext}
+            disabled={submitting || !canContinue()}
+            style={{
+              width: '100%',
+              background: canContinue() && !submitting ? '#FFDD2E' : 'rgba(255,255,255,0.08)',
+              color: canContinue() && !submitting ? '#0A0F1F' : 'rgba(245,246,250,0.4)',
+              border: 0,
+              borderRadius: 100,
+              padding: '18px',
+              fontFamily: 'Space Grotesk',
+              fontWeight: 700,
+              fontSize: 16,
+              cursor: canContinue() && !submitting ? 'pointer' : 'not-allowed',
+              boxShadow: canContinue() && !submitting ? '0 8px 24px rgba(255,221,46,0.25)' : 'none',
+              transition: 'all 0.2s',
+            }}
+          >
+            {submitting
+              ? 'Attendi…'
+              : mode === 'login'
+              ? 'Accedi'
+              : mode === 'recover'
+              ? 'Invia link di reset'
+              : step === 0
+              ? 'Continua'
+              : step === 1
+              ? 'Avanti'
+              : step === 2
+              ? 'Accetta e continua'
+              : 'Crea account'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
