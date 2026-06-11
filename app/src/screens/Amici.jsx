@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Screen from '../components/Screen.jsx';
 import Funnie from '../components/Funnie.jsx';
+import Icon from '../components/Icon.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { supabase } from '../lib/supabase.js';
 import { CONTESTS } from '../lib/contests.js';
@@ -54,6 +55,22 @@ export default function Amici() {
   }, [listFriends, listMyDuels, myUnreadDm]);
 
   useEffect(() => { if (isSupabaseConfigured) refresh(); }, [isSupabaseConfigured, refresh]);
+
+  // Apertura diretta da un'altra schermata (es. profilo amico → Messaggio/Sfida).
+  // Consumo lo stato di navigazione una sola volta, e lo ripulisco dalla history
+  // senza navigare (così non causo re-render né riaperture col tasto indietro).
+  const location = useLocation();
+  const navConsumed = useRef(false);
+  useEffect(() => {
+    if (navConsumed.current) return;
+    const st = location.state;
+    if (st?.openChat) { setChatWith(st.openChat); navConsumed.current = true; }
+    else if (st?.openDuel) { setDuelWith(st.openDuel); navConsumed.current = true; }
+    if (navConsumed.current && typeof window !== 'undefined') {
+      window.history.replaceState({}, '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   const addFriend = async (e) => {
     e.preventDefault();
@@ -392,67 +409,142 @@ function ChatView({ friend, myId, online, onBack, listDm, sendDm }) {
     }
   };
 
-  const subtitle = theyTyping
-    ? `${friend.nick} sta scrivendo…`
-    : online ? 'online' : 'Chat privata';
+  const statusText = theyTyping ? 'sta scrivendo…' : online ? 'online' : 'offline';
+  const statusColor = theyTyping || online ? '#3DDC97' : 'rgba(245,246,250,0.5)';
+  const initial = (friend.nick?.[0] || '?').toUpperCase();
 
   return (
-    <Screen
-      title={friend.nick}
-      subtitle={
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <PresenceDot online={online} />
-          <span style={{ color: theyTyping ? '#3DDC97' : (online ? '#3DDC97' : 'rgba(245,246,250,0.6)') }}>
-            {subtitle}
-          </span>
-        </span>
-      }
-      onBack={onBack}
-    >
-      <div style={{ padding: '0 22px 16px', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 200 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', color: '#F5F6FA', fontFamily: 'Inter' }}>
+      {/* Header chat: indietro + avatar + nome + stato */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', position: 'sticky', top: 0, background: '#0A0F1F', zIndex: 5 }}>
+        <button onClick={onBack} aria-label="Indietro" style={{ background: 'rgba(255,255,255,0.06)', border: 0, color: '#F5F6FA', width: 36, height: 36, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Icon name="chevL" size={18} />
+        </button>
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <div style={{ width: 42, height: 42, borderRadius: '50%', background: 'linear-gradient(135deg, #4C7DFF 0%, #1a2240 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Space Grotesk', fontWeight: 800, fontSize: 18 }}>
+            {initial}
+          </div>
+          {online && <span style={{ position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, borderRadius: '50%', background: '#3DDC97', border: '2px solid #0A0F1F', boxShadow: '0 0 6px #3DDC97' }} />}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 17, letterSpacing: -0.3 }}>{friend.nick}</div>
+          <div style={{ fontSize: 12, color: statusColor, fontWeight: 600 }}>{statusText}</div>
+        </div>
+      </div>
+
+      {/* Area messaggi */}
+      <div style={{ flex: 1, padding: '18px 18px 12px', display: 'flex', flexDirection: 'column', gap: 3, background: 'radial-gradient(120% 50% at 50% 0%, rgba(26,34,64,0.35) 0%, transparent 60%)' }}>
         {messages.length === 0 && (
-          <div style={{ color: 'rgba(245,246,250,0.5)', fontSize: 13 }}>
-            Nessun messaggio: rompi il ghiaccio!
+          <div style={{ margin: 'auto', textAlign: 'center', color: 'rgba(245,246,250,0.45)', fontSize: 14, padding: 30 }}>
+            <div style={{ fontSize: 40, marginBottom: 8 }}>👋</div>
+            Nessun messaggio ancora.<br />Rompi il ghiaccio con {friend.nick}!
           </div>
         )}
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            style={{
-              alignSelf: m.mine ? 'flex-end' : 'flex-start',
-              maxWidth: '78%',
-              background: m.mine ? '#FFDD2E' : '#1A2240',
-              color: m.mine ? '#0A0F1F' : '#F5F6FA',
-              borderRadius: m.mine ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
-              padding: '9px 12px',
-              fontSize: 14,
-              lineHeight: 1.4,
-              wordBreak: 'break-word',
-            }}
-          >
-            {m.body}
-          </div>
-        ))}
+        {messages.map((m, i) => {
+          const prev = messages[i - 1];
+          const showDivider = !prev || dayKey(prev.created_at) !== dayKey(m.created_at);
+          // Raggruppa i messaggi consecutivi dello stesso mittente (coda solo sull'ultimo).
+          const next = messages[i + 1];
+          const isLastOfGroup = !next || next.mine !== m.mine || dayKey(next.created_at) !== dayKey(m.created_at);
+          return (
+            <div key={m.id}>
+              {showDivider && (
+                <div style={{ textAlign: 'center', margin: '14px 0 10px' }}>
+                  <span style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(245,246,250,0.55)', fontSize: 11, fontFamily: 'JetBrains Mono', padding: '4px 12px', borderRadius: 100 }}>
+                    {dayLabel(m.created_at)}
+                  </span>
+                </div>
+              )}
+              <div
+                className="b4f-msg-in"
+                style={{
+                  alignSelf: m.mine ? 'flex-end' : 'flex-start',
+                  marginLeft: m.mine ? 'auto' : 0,
+                  marginRight: m.mine ? 0 : 'auto',
+                  maxWidth: '76%',
+                  marginBottom: isLastOfGroup ? 8 : 2,
+                  background: m.mine ? 'linear-gradient(135deg, #FFE45C 0%, #FFDD2E 100%)' : '#1A2240',
+                  color: m.mine ? '#1A0F00' : '#F5F6FA',
+                  borderRadius: m.mine
+                    ? `16px 16px ${isLastOfGroup ? '4px' : '16px'} 16px`
+                    : `16px 16px 16px ${isLastOfGroup ? '4px' : '16px'}`,
+                  padding: '9px 13px 7px',
+                  fontSize: 14.5,
+                  lineHeight: 1.4,
+                  wordBreak: 'break-word',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+                }}
+              >
+                <span>{m.body}</span>
+                <span style={{ fontSize: 10, marginLeft: 8, opacity: 0.55, fontFamily: 'JetBrains Mono', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>
+                  {hhmm(m.created_at)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
         {theyTyping && (
-          <div style={{ alignSelf: 'flex-start', color: 'rgba(245,246,250,0.55)', fontSize: 12, fontStyle: 'italic', padding: '2px 4px' }}>
-            {friend.nick} sta scrivendo…
+          <div style={{ alignSelf: 'flex-start', marginRight: 'auto', background: '#1A2240', borderRadius: '16px 16px 16px 4px', padding: '12px 16px', marginTop: 4, display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+            {[0, 1, 2].map((n) => (
+              <span key={n} className="b4f-typing-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: 'rgba(245,246,250,0.7)', animationDelay: `${n * 0.18}s` }} />
+            ))}
           </div>
         )}
         <div ref={endRef} />
       </div>
-      <div style={{ padding: '0 22px 30px', display: 'flex', gap: 8 }}>
-        <input
-          value={draft}
-          onChange={(e) => onType(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
-          maxLength={500}
-          placeholder="Scrivi un messaggio…"
-          style={inputStyle}
-        />
-        <button onClick={send} disabled={sending || !draft.trim()} style={btnYellow}>Invia</button>
+
+      {/* Barra di scrittura */}
+      <div style={{ padding: '10px 18px 26px', position: 'sticky', bottom: 0, background: '#0A0F1F', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 100, padding: '6px 6px 6px 16px' }}>
+          <input
+            value={draft}
+            onChange={(e) => onType(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
+            maxLength={500}
+            placeholder="Scrivi un messaggio…"
+            style={{ flex: 1, background: 'transparent', border: 0, color: '#F5F6FA', fontFamily: 'Inter', fontSize: 15, outline: 'none' }}
+          />
+          <button
+            onClick={send}
+            disabled={sending || !draft.trim()}
+            aria-label="Invia"
+            style={{
+              width: 40, height: 40, borderRadius: '50%', border: 0, flexShrink: 0,
+              background: draft.trim() ? '#FFDD2E' : 'rgba(255,255,255,0.1)',
+              color: draft.trim() ? '#0A0F1F' : 'rgba(245,246,250,0.4)',
+              cursor: draft.trim() ? 'pointer' : 'not-allowed',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s',
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7z" />
+            </svg>
+          </button>
+        </div>
       </div>
-    </Screen>
+    </div>
   );
+}
+
+// Helper data/ora per la chat.
+function hhmm(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+}
+function dayKey(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+function dayLabel(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const now = new Date();
+  const key = dayKey(iso);
+  if (key === dayKey(now.toISOString())) return 'Oggi';
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (key === dayKey(y.toISOString())) return 'Ieri';
+  return d.toLocaleDateString('it-IT', { day: '2-digit', month: 'long' });
 }
 
 function DuelForm({ nick, funnies, onCancel, onCreate }) {

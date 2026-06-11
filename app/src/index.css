@@ -67,3 +67,17 @@ a {
 .b4f-pulse      { animation: b4f-pulse 1.5s ease-in-out infinite; }
 .b4f-pop        { animation: b4f-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .b4f-fade-slide { animation: b4f-fade-slide 0.35s cubic-bezier(0.22, 0.61, 0.36, 1); }
+
+/* Bolla messaggio in entrata (chat). */
+@keyframes b4f-msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.b4f-msg-in { animation: b4f-msg-in 0.22s ease-out; }
+
+/* Tre puntini "sta scrivendo". */
+@keyframes b4f-typing {
+  0%, 60%, 100% { transform: translateY(0);   opacity: 0.4; }
+  30%           { transform: translateY(-4px); opacity: 1; }
+}
+.b4f-typing-dot { animation: b4f-typing 1.2s infinite; }

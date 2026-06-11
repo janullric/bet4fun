@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import Screen from '../components/Screen.jsx';
 import Icon from '../components/Icon.jsx';
 import Funnie from '../components/Funnie.jsx';
@@ -11,6 +11,7 @@ import { useApp } from '../context/AppContext.jsx';
 // funnies totali, posizione globale, ultima connessione, totale pronostici.
 export default function PublicProfile() {
   const { handle } = useParams();
+  const navigate = useNavigate();
   const {
     getPublicProfile, isSupabaseConfigured, user,
     sendFriendRequest, listFriends,
@@ -21,6 +22,7 @@ export default function PublicProfile() {
   const [err, setErr]     = useState(null);
   // Stato amicizia con questo utente: null | 'amico' | 'inviata' | 'ricevuta'
   const [friendState, setFriendState] = useState(null);
+  const [friendObj, setFriendObj] = useState(null); // { friend_id, nick } se amico
   const [friendMsg, setFriendMsg] = useState(null);
 
   useEffect(() => {
@@ -36,10 +38,20 @@ export default function PublicProfile() {
         if (!alive) return;
         const mine = (rows || []).find((f) => f.nick?.toLowerCase() === String(handle).toLowerCase());
         setFriendState(mine?.state || null);
+        setFriendObj(mine && mine.state === 'amico' ? mine : null);
       })
       .catch(() => {});
     return () => { alive = false; };
   }, [handle, getPublicProfile, listFriends, isSupabaseConfigured]);
+
+  // Apre la chat privata con questo amico (riusa la schermata Amici).
+  const openChat = () => {
+    if (!friendObj) return;
+    navigate('/amici', { state: { openChat: { friend_id: friendObj.friend_id, nick: friendObj.nick } } });
+  };
+  const openDuel = () => {
+    navigate('/amici', { state: { openDuel: { nick: handle } } });
+  };
 
   const addFriend = async () => {
     setFriendMsg(null);
@@ -126,8 +138,31 @@ export default function PublicProfile() {
       {user?.nick?.toLowerCase() !== String(data.nick).toLowerCase() && (
         <div style={{ padding: '0 22px 22px' }}>
           {friendState === 'amico' ? (
-            <div style={{ color: '#3DDC97', fontSize: 13, fontWeight: 600 }}>
-              ✓ Siete amici — trovalo nella sezione Amici per chat e sfide.
+            <div>
+              <div style={{ color: '#3DDC97', fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+                ✓ Siete amici
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={openChat}
+                  style={{
+                    flex: 1, background: '#FFDD2E', color: '#0A0F1F', border: 0, borderRadius: 100,
+                    padding: 13, fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 14, cursor: 'pointer',
+                  }}
+                >
+                  💬 Messaggio
+                </button>
+                <button
+                  onClick={openDuel}
+                  style={{
+                    flex: 1, background: 'rgba(255,255,255,0.06)', color: '#F5F6FA',
+                    border: '1px solid rgba(255,255,255,0.12)', borderRadius: 100,
+                    padding: 13, fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 14, cursor: 'pointer',
+                  }}
+                >
+                  ⚔️ Sfida
+                </button>
+              </div>
             </div>
           ) : friendState === 'inviata' ? (
             <div style={{ color: 'rgba(245,246,250,0.6)', fontSize: 13 }}>
