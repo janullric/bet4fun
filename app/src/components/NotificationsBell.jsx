@@ -12,12 +12,13 @@ export default function NotificationsBell() {
   const navigate = useNavigate();
   const {
     isSupabaseConfigured, isAuthed,
-    listMyBets, listFriends, myUnreadDm,
+    listMyBets, listFriends, myUnreadDm, listMyDuels,
   } = useApp();
 
   const [open, setOpen] = useState(false);
   const [bets, setBets] = useState([]);
   const [friendReqs, setFriendReqs] = useState([]);
+  const [duelReqs, setDuelReqs] = useState([]);
   const [unreadTotal, setUnreadTotal] = useState(0);
   const ref = useRef(null);
 
@@ -29,10 +30,14 @@ export default function NotificationsBell() {
       setFriendReqs((fr || []).filter((f) => f.state === 'ricevuta'));
     } catch { /* noop */ }
     try {
+      const d = await listMyDuels();
+      setDuelReqs((d || []).filter((x) => x.status === 'pending' && !x.im_challenger));
+    } catch { /* noop */ }
+    try {
       const u = await myUnreadDm();
       setUnreadTotal((u || []).reduce((s, r) => s + Number(r.unread || 0), 0));
     } catch { /* noop */ }
-  }, [isSupabaseConfigured, isAuthed, listMyBets, listFriends, myUnreadDm]);
+  }, [isSupabaseConfigured, isAuthed, listMyBets, listFriends, myUnreadDm, listMyDuels]);
 
   // Carico al mount e ogni volta che apro il pannello (dati freschi).
   useEffect(() => { load(); }, [load]);
@@ -51,7 +56,7 @@ export default function NotificationsBell() {
   const openBets = bets.filter((b) => b.editable);
   const recent = bets.slice(0, 3);
   const hasNotifications =
-    friendReqs.length > 0 || unreadTotal > 0 || openBets.length > 0 || bets.length > 0;
+    friendReqs.length > 0 || duelReqs.length > 0 || unreadTotal > 0 || openBets.length > 0 || bets.length > 0;
 
   const go = (path) => { setOpen(false); navigate(path); };
 
@@ -90,6 +95,15 @@ export default function NotificationsBell() {
                 {friendReqs.length} richiesta{friendReqs.length > 1 ? 'e' : ''} di amicizia
               </div>
               <div style={subStyle}>{friendReqs.map((f) => f.nick).join(', ')} · Rispondi →</div>
+            </button>
+          )}
+
+          {duelReqs.length > 0 && (
+            <button onClick={() => go('/amici')} style={card('rgba(255,90,106,0.10)', 'rgba(255,90,106,0.35)')}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>
+                ⚔️ {duelReqs.length} sfida{duelReqs.length > 1 ? 'e' : ''} da accettare
+              </div>
+              <div style={subStyle}>{duelReqs.map((d) => `${d.rival} (${d.stake})`).join(', ')} · Rispondi →</div>
             </button>
           )}
 

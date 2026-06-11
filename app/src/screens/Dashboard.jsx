@@ -26,21 +26,26 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const {
     funnies, user, listMyBets, isSupabaseConfigured, isAuthed,
-    myRank, globalLeaderboard, monthlyChallenge, listFriends,
+    myRank, globalLeaderboard, monthlyChallenge, listFriends, listMyDuels,
   } = useApp();
 
-  // Richieste di amicizia ricevute (per il badge sulla quick action Amici).
+  // Cose "da accettare": richieste di amicizia + sfide 1v1 ricevute.
+  // Vanno sul badge della quick action Amici in home.
   const [friendReqs, setFriendReqs] = useState(0);
+  const [duelReqs, setDuelReqs] = useState(0);
   useEffect(() => {
-    if (!isSupabaseConfigured || !isAuthed || !listFriends) return;
+    if (!isSupabaseConfigured || !isAuthed) return;
     let alive = true;
-    listFriends()
-      .then((rows) => {
-        if (alive) setFriendReqs((rows || []).filter((f) => f.state === 'ricevuta').length);
-      })
+    if (listFriends) listFriends()
+      .then((rows) => { if (alive) setFriendReqs((rows || []).filter((f) => f.state === 'ricevuta').length); })
+      .catch(() => {});
+    if (listMyDuels) listMyDuels()
+      .then((rows) => { if (alive) setDuelReqs((rows || []).filter((d) => d.status === 'pending' && !d.im_challenger).length); })
       .catch(() => {});
     return () => { alive = false; };
-  }, [isSupabaseConfigured, isAuthed, listFriends]);
+  }, [isSupabaseConfigured, isAuthed, listFriends, listMyDuels]);
+
+  const amiciBadge = friendReqs + duelReqs;
 
   const leagueIds = useMemo(() => CONTESTS.map((c) => c.league.id), []);
   const { data: events, loading } = useUpcomingForLeagues(leagueIds, 3);
@@ -213,9 +218,9 @@ export default function Dashboard() {
           onClick={() => navigate('/amici')}
           icon="users"
           label="Amici"
-          sub={friendReqs > 0 ? `${friendReqs} richiesta${friendReqs > 1 ? 'e' : ''} da accettare!` : 'Chat e sfide 1v1'}
-          badge={friendReqs}
-          accent={friendReqs > 0}
+          sub={amiciBadge > 0 ? `${amiciBadge} da accettare!` : 'Chat e sfide 1v1'}
+          badge={amiciBadge}
+          accent={amiciBadge > 0}
         />
         <QuickAction
           onClick={() => navigate('/gruppi')}

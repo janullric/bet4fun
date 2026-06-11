@@ -302,7 +302,12 @@ export function AppProvider({ children }) {
   const myUnreadDm          = useCallback(() => rpc('my_unread_dm').catch(() => []), [rpc]);
   const createDuel          = useCallback(({ nick, leagueId, round, stake }) =>
     rpc('create_duel', { p_nick: nick, p_league_id: String(leagueId), p_round: Number(round), p_stake: Number(stake) }, null), [rpc]);
-  const respondDuel         = useCallback((id, accept) => rpc('respond_duel', { p_id: Number(id), p_accept: !!accept }, null), [rpc]);
+  // Accettare una sfida muove i Funnies (escrow): aggiorno subito il saldo.
+  const respondDuel         = useCallback(async (id, accept) => {
+    const out = await rpc('respond_duel', { p_id: Number(id), p_accept: !!accept }, null);
+    await refreshProfile();
+    return out;
+  }, [rpc, refreshProfile]);
   const listMyDuels         = useCallback(() => rpc('list_my_duels'), [rpc]);
 
   // Classifica stagionale (annuale) con montepremi dedicato.

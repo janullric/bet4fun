@@ -104,6 +104,8 @@ export default function Amici() {
   const accepted = friends.filter((f) => f.state === 'amico');
   const incoming = friends.filter((f) => f.state === 'ricevuta');
   const outgoing = friends.filter((f) => f.state === 'inviata');
+  // Sfide ricevute ancora da accettare (azione richiesta).
+  const pendingDuels = duels.filter((d) => d.status === 'pending' && !d.im_challenger);
 
   return (
     <Screen title="Amici" subtitle="Aggiungi, chatta, sfida." onBack={() => navigate('/home')}>
@@ -163,6 +165,67 @@ export default function Amici() {
           </div>
         )}
 
+        {/* Sfide da accettare — banner vistoso in cima */}
+        {pendingDuels.length > 0 && (
+          <div
+            style={{
+              background: 'rgba(255,90,106,0.10)',
+              border: '1px solid rgba(255,90,106,0.45)',
+              borderRadius: 16,
+              padding: 14,
+              marginBottom: 18,
+              boxShadow: '0 0 0 4px rgba(255,90,106,0.06)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <span
+                className="b4f-pulse"
+                style={{
+                  minWidth: 24, height: 24, padding: '0 7px', borderRadius: 12,
+                  background: '#FF5A6A', color: '#fff', fontSize: 13, fontWeight: 800,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                {pendingDuels.length}
+              </span>
+              <span style={{ fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 16, color: '#FF8A95' }}>
+                {pendingDuels.length === 1 ? 'Sfida ricevuta!' : 'Sfide ricevute!'}
+              </span>
+            </div>
+            {pendingDuels.map((d) => {
+              const league = findLeagueById(d.league_id);
+              return (
+                <div
+                  key={d.id}
+                  style={{
+                    background: 'rgba(255,255,255,0.04)', borderRadius: 12,
+                    padding: '12px 14px', marginBottom: 8,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <span style={{ fontWeight: 700, fontSize: 14 }}>
+                      ⚔️ {d.rival} ti sfida
+                      <span style={{ color: 'rgba(245,246,250,0.55)', fontWeight: 500, marginLeft: 6, fontSize: 12 }}>
+                        {league?.label || d.league_id} · G{d.round}
+                      </span>
+                    </span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#FFDD2E', fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 700 }}>
+                      <Funnie size={11} /> {d.stake} a testa
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => respondToDuel(d.id, true)} style={btnSolid('#3DDC97')}>Accetto la sfida</button>
+                    <button onClick={() => respondToDuel(d.id, false)} style={btnSmall('#FF5A6A')}>Rifiuto</button>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'rgba(245,246,250,0.5)', marginTop: 8 }}>
+                    Accettando, a entrambi vengono messi da parte {d.stake} Funnies. Chi fa più punti in quella giornata vince {d.stake * 2}.
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         <SectionLabel>I tuoi amici ({accepted.length})</SectionLabel>
         {accepted.length === 0 && (
           <div style={{ color: 'rgba(245,246,250,0.55)', fontSize: 13, marginBottom: 10 }}>
@@ -219,10 +282,11 @@ export default function Amici() {
           </>
         )}
 
-        {duels.length > 0 && (
+        {/* Storico/stato sfide: escludo quelle da accettare (sono nel banner). */}
+        {duels.filter((d) => !(d.status === 'pending' && !d.im_challenger)).length > 0 && (
           <>
             <SectionLabel>Sfide 1v1</SectionLabel>
-            {duels.map((d) => {
+            {duels.filter((d) => !(d.status === 'pending' && !d.im_challenger)).map((d) => {
               const league = findLeagueById(d.league_id);
               return (
                 <div key={d.id} style={{ ...rowStyle, flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
@@ -237,12 +301,6 @@ export default function Amici() {
                       <Funnie size={11} /> {d.stake} a testa
                     </span>
                   </div>
-                  {d.status === 'pending' && !d.im_challenger && (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => respondToDuel(d.id, true)} style={btnSmall('#3DDC97')}>Accetto la sfida</button>
-                      <button onClick={() => respondToDuel(d.id, false)} style={btnSmall('#FF5A6A')}>Rifiuto</button>
-                    </div>
-                  )}
                   <div style={{ fontSize: 11, color: 'rgba(245,246,250,0.55)', fontFamily: 'JetBrains Mono' }}>
                     {d.status === 'pending' && d.im_challenger && 'In attesa di risposta…'}
                     {d.status === 'accepted' && `Accettata: in palio ${d.stake * 2} Funnies. Si decide a fine giornata.`}
