@@ -6,6 +6,7 @@ import Funnie from '../components/Funnie.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { findLeagueById } from '../lib/sportsApi.js';
 import { formatMatchDate } from '../lib/format.js';
+import { CONTESTS } from '../lib/contests.js';
 
 // Schermata gruppi: lista dei miei gruppi + creazione + join via codice +
 // drill-down alla classifica interna. Tutta la logica è nei wrapper RPC;
@@ -20,6 +21,9 @@ export default function Gruppi() {
     leaveGroup,
     groupRoundBets,
     groupLeagueStandings,
+    setGroupStake,
+    addBetComment,
+    listGroupComments,
   } = useApp();
 
   const [groups, setGroups] = useState([]);
@@ -31,6 +35,16 @@ export default function Gruppi() {
   const [groupBets, setGroupBets] = useState(null);
   const [standings, setStandings] = useState(null);
   const [boardTab, setBoardTab] = useState('generale'); // 'generale' | leagueId
+  const [comments, setComments] = useState([]);
+  const [stake, setStake] = useState(null); // { title, leagueId }
+
+  const reloadComments = async (groupId) => {
+    try {
+      setComments(await listGroupComments(groupId));
+    } catch {
+      setComments([]);
+    }
+  };
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -74,6 +88,8 @@ export default function Gruppi() {
     } catch {
       setStandings([]);
     }
+    setStake({ title: group.stake_title || '', leagueId: group.stake_league_id || '' });
+    await reloadComments(group.id);
   };
 
   const handleLeave = async (group) => {
@@ -107,6 +123,16 @@ export default function Gruppi() {
       >
         <div style={{ padding: '0 22px 16px' }}>
           <InviteCard code={g.invite_code} />
+
+          <GroupStakeCard
+            stake={stake}
+            isOwner={g.is_owner}
+            onSave={async (next) => {
+              await setGroupStake({ groupId: g.id, title: next.title, leagueId: next.leagueId });
+              setStake(next);
+              await refresh();
+            }}
+          />
           <div style={{ marginTop: 18, marginBottom: 10, color: 'rgba(245,246,250,0.6)', fontSize: 12, fontFamily: 'JetBrains Mono', textTransform: 'uppercase', letterSpacing: 1 }}>
             Classifica interna
           </div>
@@ -181,7 +207,15 @@ export default function Gruppi() {
             </div>
           )}
           {groupBets && groupBets.map((b, i) => (
-            <GroupBetCard key={i} bet={b} />
+            <GroupBetCard
+              key={i}
+              bet={b}
+              comments={comments.filter((c) => Number(c.bet_id) === Number(b.bet_id))}
+              onComment={async (body) => {
+                await addBetComment({ groupId: g.id, betId: b.bet_id, body });
+                await reloadComments(g.id);
+              }}
+            />
           ))}
         </div>
         <div style={{ padding: '0 22px 30px' }}>
@@ -354,6 +388,118 @@ function InviteCard({ code }) {
   );
 }
 
+// Premio del gruppo: "chi perde paga la pizza". Visibile a tutti,
+// modificabile solo dall'owner.
+function GroupStakeCard({ stake, isOwner, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState('');
+  const [leagueId, setLeagueId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const startEdit = () => {
+    setTitle(stake?.title || '');
+    setLeagueId(stake?.leagueId || '');
+    setEditing(true);
+  };
+
+  const save = async () => {
+    setSaving(true); setErr(null);
+    try {
+      await onSave({ title, leagueId });
+      setEditing(false);
+    } catch (e) {
+      setErr(e?.message || 'Errore.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!stake?.title && !isOwner) return null;
+
+  const leagueLabel = stake?.leagueId
+    ? (findLeagueById(stake.leagueId)?.label || stake.leagueId)
+    : null;
+
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        background: 'rgba(76,125,255,0.08)',
+        border: '1px solid rgba(76,125,255,0.25)',
+        borderRadius: 16,
+        padding: 14,
+        color: '#F5F6FA',
+      }}
+    >
+      <div style={{ fontSize: 11, fontFamily: 'JetBrains Mono', color: '#4C7DFF', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
+        🏆 Premio in palio
+      </div>
+
+      {!editing && (
+        <>
+          {stake?.title ? (
+            <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.4 }}>
+              {stake.title}
+              {leagueLabel && (
+                <span style={{ color: 'rgba(245,246,250,0.55)', fontWeight: 500, fontSize: 12, marginLeft: 6 }}>
+                  · {leagueLabel}
+                </span>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: 'rgba(245,246,250,0.55)' }}>
+              Nessun premio impostato. Esempio: "L'ultimo dei Mondiali paga la pizza".
+            </div>
+          )}
+          {isOwner && (
+            <button onClick={startEdit} style={{ ...smallBtn, marginTop: 8 }}>
+              {stake?.title ? 'Modifica' : 'Imposta premio'}
+            </button>
+          )}
+        </>
+      )}
+
+      {editing && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            maxLength={120}
+            placeholder='es. "Ultimo classificato paga la pizza"'
+            style={input}
+          />
+          <select value={leagueId} onChange={(e) => setLeagueId(e.target.value)} style={input}>
+            <option value="">Su tutto (classifica generale)</option>
+            {CONTESTS.map((c) => (
+              <option key={c.key} value={c.league.id}>{c.league.label}</option>
+            ))}
+          </select>
+          {err && <div style={{ color: '#FF5A6A', fontSize: 12 }}>{err}</div>}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={save} disabled={saving} style={{ ...smallBtn, background: '#FFDD2E', color: '#0A0F1F', border: 0 }}>
+              {saving ? 'Salvo…' : 'Salva'}
+            </button>
+            <button onClick={() => setEditing(false)} style={smallBtn}>Annulla</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const smallBtn = {
+  background: 'rgba(255,255,255,0.06)',
+  border: '1px solid rgba(255,255,255,0.12)',
+  color: '#F5F6FA',
+  borderRadius: 10,
+  padding: '7px 14px',
+  fontFamily: 'Space Grotesk',
+  fontWeight: 700,
+  fontSize: 12,
+  cursor: 'pointer',
+};
+
 // Etichetta leggibile per un pick: "1 / X / 2" per i match, "P1 nome" per
 // i pick gara (formato "p{N}:{id}").
 function pickLabel(outcome) {
@@ -362,9 +508,27 @@ function pickLabel(outcome) {
   return outcome;
 }
 
-function GroupBetCard({ bet }) {
+function GroupBetCard({ bet, comments = [], onComment }) {
   const league = findLeagueById(bet.league_id);
   const picks = Array.isArray(bet.picks) ? bet.picks : [];
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const visibleComments = showAll ? comments : comments.slice(-2);
+
+  const send = async () => {
+    const body = draft.trim();
+    if (!body || !onComment || sending) return;
+    setSending(true);
+    try {
+      await onComment(body);
+      setDraft('');
+    } catch {
+      // errore silenzioso: il commento resta nel campo
+    } finally {
+      setSending(false);
+    }
+  };
   return (
     <div
       style={{
@@ -430,6 +594,61 @@ function GroupBetCard({ bet }) {
             </div>
           );
         })}
+      </div>
+
+      {/* Sfottò & commenti */}
+      <div style={{ marginTop: 10, borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 8 }}>
+        {comments.length > 2 && !showAll && (
+          <button
+            onClick={() => setShowAll(true)}
+            style={{ background: 'none', border: 0, color: 'rgba(245,246,250,0.5)', fontSize: 11, cursor: 'pointer', padding: '0 0 6px' }}
+          >
+            Mostra tutti i {comments.length} commenti
+          </button>
+        )}
+        {visibleComments.map((c, i) => (
+          <div key={i} style={{ fontSize: 12, marginBottom: 5, lineHeight: 1.4 }}>
+            <strong style={{ color: c.is_me ? '#FFDD2E' : '#4C7DFF' }}>{c.nick}</strong>{' '}
+            <span style={{ color: 'rgba(245,246,250,0.8)' }}>{c.body}</span>
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
+            maxLength={200}
+            placeholder="Lascia uno sfottò… 😏"
+            style={{
+              flex: 1,
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 10,
+              padding: '8px 10px',
+              color: '#F5F6FA',
+              fontFamily: 'Inter',
+              fontSize: 12,
+              outline: 'none',
+            }}
+          />
+          <button
+            onClick={send}
+            disabled={sending || !draft.trim()}
+            style={{
+              background: draft.trim() ? '#FFDD2E' : 'rgba(255,255,255,0.06)',
+              color: draft.trim() ? '#0A0F1F' : 'rgba(245,246,250,0.3)',
+              border: 0,
+              borderRadius: 10,
+              padding: '8px 12px',
+              fontFamily: 'Space Grotesk',
+              fontWeight: 700,
+              fontSize: 12,
+              cursor: draft.trim() ? 'pointer' : 'not-allowed',
+            }}
+          >
+            {sending ? '…' : 'Invia'}
+          </button>
+        </div>
       </div>
     </div>
   );

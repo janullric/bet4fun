@@ -298,7 +298,32 @@ export default function Schedina() {
             </div>
           )}
         </div>
-        <div style={{ padding: '0 22px 40px' }}>
+        <div style={{ padding: '0 22px 40px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent(
+              `⚽ Ho appena giocato la schedina ${contest.league.label} su Bet4Fun: ${matches.length} pronostici! Battimi se ci riesci 😎 https://bet4fun-egej.vercel.app`
+            )}`}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              background: '#25D366',
+              color: '#0A0F1F',
+              border: 0,
+              borderRadius: 100,
+              padding: 16,
+              fontFamily: 'Space Grotesk',
+              fontWeight: 700,
+              fontSize: 15,
+              cursor: 'pointer',
+              textAlign: 'center',
+              textDecoration: 'none',
+              display: 'block',
+            }}
+          >
+            📤 Sfida gli amici su WhatsApp
+          </a>
           <button
             onClick={() => navigate('/pronostici')}
             style={{

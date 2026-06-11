@@ -190,6 +190,52 @@ export function AppProvider({ children }) {
     return data || [];
   }, []);
 
+  // Premio del gruppo ("chi perde paga la pizza") — solo owner.
+  const setGroupStake = useCallback(async ({ groupId, title, leagueId }) => {
+    if (!supabase) throw new Error('Supabase non configurato');
+    const { error } = await supabase.rpc('set_group_stake', {
+      p_group_id: groupId,
+      p_title: title || null,
+      p_league_id: leagueId || null,
+    });
+    if (error) throw error;
+  }, []);
+
+  // Commenti/sfottò sulle schedine del gruppo (solo a giornata iniziata).
+  const addBetComment = useCallback(async ({ groupId, betId, body }) => {
+    if (!supabase) throw new Error('Supabase non configurato');
+    const { error } = await supabase.rpc('add_bet_comment', {
+      p_group_id: groupId, p_bet_id: Number(betId), p_body: body,
+    });
+    if (error) throw error;
+  }, []);
+
+  const listGroupComments = useCallback(async (groupId) => {
+    if (!supabase) return [];
+    const { data, error } = await supabase.rpc('list_group_comments', {
+      p_group_id: groupId,
+    });
+    if (error) throw error;
+    return data || [];
+  }, []);
+
+  // Archivio giornate chiuse (montepremi, vincitori, i miei punti).
+  const listSettledRounds = useCallback(async () => {
+    if (!supabase) return [];
+    const { data, error } = await supabase.rpc('list_settled_rounds');
+    if (error) throw error;
+    return data || [];
+  }, []);
+
+  // Badge e streak del profilo.
+  const myProfileStats = useCallback(async () => {
+    if (!supabase) return null;
+    const { data, error } = await supabase.rpc('my_profile_stats');
+    if (error) return null;
+    const row = Array.isArray(data) ? data[0] : data;
+    return row || null;
+  }, []);
+
   // Lead Boost — campagne consenso esplicito.
   const listLeadCampaigns = useCallback(async () => {
     if (!supabase) return [];
@@ -474,6 +520,11 @@ export function AppProvider({ children }) {
     leaveGroup,
     groupRoundBets,
     groupLeagueStandings,
+    setGroupStake,
+    addBetComment,
+    listGroupComments,
+    listSettledRounds,
+    myProfileStats,
     listLeadCampaigns,
     submitLead,
     getPublicProfile,

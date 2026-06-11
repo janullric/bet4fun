@@ -6,11 +6,12 @@ import Funnie from '../components/Funnie.jsx';
 import SectionHeader from '../components/SectionHeader.jsx';
 import { useApp } from '../context/AppContext.jsx';
 
-const STATS = [
+// Statistiche demo, usate solo senza Supabase configurato.
+const DEMO_STATS = [
   { label: 'Pronostici',      value: '1.247' },
   { label: 'Accuratezza',     value: '64%' },
   { label: 'Streak',          value: '7' },
-  { label: 'Premi ritirati',  value: '8' },
+  { label: 'Vincite',         value: '8' },
 ];
 
 export default function Profilo() {
@@ -25,15 +26,32 @@ export default function Profilo() {
     listMyGroups,
     setConsent,
     refreshProfile,
+    myProfileStats,
+    myRank,
   } = useApp();
 
   const [groups, setGroups] = useState([]);
   const [consentBusy, setConsentBusy] = useState(null);
+  const [pstats, setPstats] = useState(null);
+  const [rankInfo, setRankInfo] = useState(null);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !isAuthed) return;
     listMyGroups().then(setGroups).catch(() => setGroups([]));
-  }, [isSupabaseConfigured, isAuthed, listMyGroups]);
+    myProfileStats().then(setPstats).catch(() => {});
+    myRank().then(setRankInfo).catch(() => {});
+  }, [isSupabaseConfigured, isAuthed, listMyGroups, myProfileStats, myRank]);
+
+  // Stats reali (con Supabase) o demo (repo senza backend).
+  const STATS = isSupabaseConfigured
+    ? [
+        { label: 'Pronostici',  value: pstats ? String(pstats.total_bets) : '…' },
+        { label: 'Accuratezza', value: rankInfo?.accuracy != null ? `${rankInfo.accuracy}%` : '—' },
+        { label: 'Streak',      value: pstats ? String(pstats.best_streak) : '…' },
+        { label: 'Vincite',     value: pstats ? String(pstats.rounds_won) : '…' },
+      ]
+    : DEMO_STATS;
+  const badges = Array.isArray(pstats?.badges) ? pstats.badges : [];
 
   const toggleConsent = async (scope) => {
     if (!isSupabaseConfigured) return;
@@ -204,6 +222,47 @@ export default function Profilo() {
           </div>
         ))}
       </div>
+
+      {/* badge */}
+      {isSupabaseConfigured && badges.length > 0 && (
+        <>
+          <SectionHeader title="Badge" />
+          <div
+            style={{
+              padding: '0 22px 24px',
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 8,
+            }}
+          >
+            {badges.map((b) => (
+              <div
+                key={b.id}
+                style={{
+                  background: b.earned ? 'rgba(255,221,46,0.07)' : '#111830',
+                  border: b.earned
+                    ? '1px solid rgba(255,221,46,0.3)'
+                    : '1px solid rgba(255,255,255,0.04)',
+                  borderRadius: 14,
+                  padding: '12px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  opacity: b.earned ? 1 : 0.45,
+                }}
+              >
+                <span style={{ fontSize: 22, filter: b.earned ? 'none' : 'grayscale(1)' }}>{b.icon}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.3 }}>{b.label}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(245,246,250,0.5)', fontFamily: 'JetBrains Mono' }}>
+                    {b.earned ? 'Sbloccato' : 'Da sbloccare'}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* funnies breakdown */}
       <SectionHeader title="Funnies" />

@@ -7,7 +7,7 @@ import SectionHeader from '../components/SectionHeader.jsx';
 import LeaderRow from '../components/LeaderRow.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { CONTESTS } from '../lib/contests.js';
-import { useUpcomingForLeagues } from '../hooks/useEvents.js';
+import { useUpcomingForLeagues, useCurrentRoundsForLeagues } from '../hooks/useEvents.js';
 import { formatMatchDate, formatCountdown } from '../lib/format.js';
 
 // Demo mostrata SOLO quando Supabase non è configurato (repo in anteprima).
@@ -75,7 +75,32 @@ export default function Dashboard() {
   }, [isSupabaseConfigured, isAuthed, listMyBets]);
 
   const openBets = useMemo(() => bets.filter((b) => b.editable), [bets]);
-  const hasNotifications = openBets.length > 0 || bets.length > 0;
+
+  // Promemoria: concorsi giocabili che chiudono entro 48h e che l'utente
+  // NON ha ancora pronosticato → notifica "⏰ gioca prima del kickoff".
+  const { data: roundsMeta } = useCurrentRoundsForLeagues(leagueIds);
+  const reminders = useMemo(() => {
+    const out = [];
+    const now = Date.now();
+    (roundsMeta || []).forEach((r) => {
+      const meta = r?.meta;
+      if (!r?.leagueId || !meta?.round || !(meta.count > 0) || !meta.firstKickISO) return;
+      const kick = new Date(meta.firstKickISO).getTime();
+      const msLeft = kick - 60 * 1000 - now;
+      if (msLeft <= 0 || msLeft > 48 * 3600 * 1000) return;          // chiude entro 48h
+      const played = bets.some(
+        (b) => String(b.league_id) === String(r.leagueId) && Number(b.round) === Number(meta.round)
+      );
+      if (played) return;
+      const contest = CONTESTS.find((c) => String(c.league.id) === String(r.leagueId));
+      if (!contest) return;
+      out.push({ contest, round: meta.round, kickISO: meta.firstKickISO, msLeft });
+    });
+    out.sort((a, b) => a.msLeft - b.msLeft);
+    return out.slice(0, 4);
+  }, [roundsMeta, bets]);
+
+  const hasNotifications = reminders.length > 0 || openBets.length > 0 || bets.length > 0;
   const upcoming = useMemo(() => {
     const seen = new Set();
     const unique = (events || []).filter((e) =>
@@ -101,6 +126,7 @@ export default function Dashboard() {
         <NotificationsBell
           bets={bets}
           openBets={openBets}
+          reminders={reminders}
           hasNotifications={hasNotifications}
           onNavigate={navigate}
         />
@@ -440,7 +466,7 @@ export default function Dashboard() {
   );
 }
 
-function NotificationsBell({ bets, openBets, hasNotifications, onNavigate }) {
+function NotificationsBell({ bets, openBets, reminders = [], hasNotifications, onNavigate }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -523,6 +549,32 @@ function NotificationsBell({ bets, openBets, hasNotifications, onNavigate }) {
           >
             Notifiche
           </div>
+
+          {reminders.map((r, i) => (
+            <button
+              key={`rem-${i}`}
+              onClick={() => go(`/pronostici/${r.contest.key}`)}
+              style={{
+                width: '100%',
+                textAlign: 'left',
+                background: 'rgba(255,90,106,0.10)',
+                border: '1px solid rgba(255,90,106,0.3)',
+                color: '#F5F6FA',
+                borderRadius: 12,
+                padding: '10px 12px',
+                marginBottom: 8,
+                cursor: 'pointer',
+                fontFamily: 'Inter',
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 700 }}>
+                ⏰ {r.contest.league.label} chiude tra {formatCountdown(r.kickISO)}
+              </div>
+              <div style={{ fontSize: 11, color: 'rgba(245,246,250,0.65)', marginTop: 2 }}>
+                Non hai ancora giocato — pronostica ora →
+              </div>
+            </button>
+          ))}
 
           {openBets.length > 0 && (
             <button
