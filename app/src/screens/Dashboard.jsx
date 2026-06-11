@@ -26,8 +26,21 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const {
     funnies, user, listMyBets, isSupabaseConfigured, isAuthed,
-    myRank, globalLeaderboard, monthlyChallenge,
+    myRank, globalLeaderboard, monthlyChallenge, listFriends,
   } = useApp();
+
+  // Richieste di amicizia ricevute (per il badge sulla quick action Amici).
+  const [friendReqs, setFriendReqs] = useState(0);
+  useEffect(() => {
+    if (!isSupabaseConfigured || !isAuthed || !listFriends) return;
+    let alive = true;
+    listFriends()
+      .then((rows) => {
+        if (alive) setFriendReqs((rows || []).filter((f) => f.state === 'ricevuta').length);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [isSupabaseConfigured, isAuthed, listFriends]);
 
   const leagueIds = useMemo(() => CONTESTS.map((c) => c.league.id), []);
   const { data: events, loading } = useUpcomingForLeagues(leagueIds, 3);
@@ -200,7 +213,9 @@ export default function Dashboard() {
           onClick={() => navigate('/amici')}
           icon="users"
           label="Amici"
-          sub="Chat e sfide 1v1"
+          sub={friendReqs > 0 ? `${friendReqs} richiesta${friendReqs > 1 ? 'e' : ''} da accettare!` : 'Chat e sfide 1v1'}
+          badge={friendReqs}
+          accent={friendReqs > 0}
         />
         <QuickAction
           onClick={() => navigate('/gruppi')}
@@ -432,7 +447,7 @@ export default function Dashboard() {
   );
 }
 
-function QuickAction({ icon, label, sub, onClick, accent }) {
+function QuickAction({ icon, label, sub, onClick, accent, badge = 0 }) {
   return (
     <button
       onClick={onClick}
@@ -451,8 +466,34 @@ function QuickAction({ icon, label, sub, onClick, accent }) {
         gap: 8,
         fontFamily: 'Inter',
         textAlign: 'left',
+        position: 'relative',
       }}
     >
+      {badge > 0 && (
+        <span
+          className="b4f-pulse"
+          style={{
+            position: 'absolute',
+            top: 10,
+            right: 10,
+            minWidth: 22,
+            height: 22,
+            padding: '0 6px',
+            borderRadius: 11,
+            background: '#FF5A6A',
+            color: '#fff',
+            fontSize: 12,
+            fontWeight: 800,
+            fontFamily: 'Space Grotesk',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 0 0 3px rgba(255,90,106,0.25)',
+          }}
+        >
+          {badge}
+        </span>
+      )}
       <div
         style={{
           width: 36,

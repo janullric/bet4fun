@@ -102,16 +102,46 @@ export default function Amici() {
         {err && <div style={{ color: '#FF5A6A', fontSize: 13, marginBottom: 10 }}>{err}</div>}
 
         {incoming.length > 0 && (
-          <>
-            <SectionLabel>Richieste ricevute</SectionLabel>
+          <div
+            style={{
+              background: 'rgba(255,221,46,0.10)',
+              border: '1px solid rgba(255,221,46,0.4)',
+              borderRadius: 16,
+              padding: 14,
+              marginBottom: 18,
+              boxShadow: '0 0 0 4px rgba(255,221,46,0.06)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <span
+                className="b4f-pulse"
+                style={{
+                  minWidth: 24, height: 24, padding: '0 7px', borderRadius: 12,
+                  background: '#FF5A6A', color: '#fff', fontSize: 13, fontWeight: 800,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                {incoming.length}
+              </span>
+              <span style={{ fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 16, color: '#FFDD2E' }}>
+                {incoming.length === 1 ? 'Nuova richiesta di amicizia!' : 'Nuove richieste di amicizia!'}
+              </span>
+            </div>
             {incoming.map((f) => (
-              <Row key={f.friendship_id}>
-                <span style={{ flex: 1, fontWeight: 600 }}>{f.nick}</span>
-                <button onClick={() => respond(f.friendship_id, true)} style={btnSmall('#3DDC97')}>Accetta</button>
+              <div
+                key={f.friendship_id}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  background: 'rgba(255,255,255,0.04)', borderRadius: 12,
+                  padding: '12px 14px', marginBottom: 8,
+                }}
+              >
+                <span style={{ flex: 1, fontWeight: 700, fontSize: 15 }}>{f.nick}</span>
+                <button onClick={() => respond(f.friendship_id, true)} style={btnSolid('#3DDC97')}>Accetta</button>
                 <button onClick={() => respond(f.friendship_id, false)} style={btnSmall('#FF5A6A')}>Rifiuta</button>
-              </Row>
+              </div>
             ))}
-          </>
+          </div>
         )}
 
         <SectionLabel>I tuoi amici ({accepted.length})</SectionLabel>
@@ -383,6 +413,21 @@ function btnSmall(color) {
     fontFamily: 'Space Grotesk',
     fontWeight: 700,
     fontSize: 12,
+    cursor: 'pointer',
+  };
+}
+
+// Bottone pieno (più evidente) per l'azione principale "Accetta".
+function btnSolid(bg) {
+  return {
+    background: bg,
+    border: 0,
+    color: '#0A0F1F',
+    borderRadius: 10,
+    padding: '8px 16px',
+    fontFamily: 'Space Grotesk',
+    fontWeight: 800,
+    fontSize: 13,
     cursor: 'pointer',
   };
 }
