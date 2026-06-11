@@ -283,6 +283,17 @@ export function AppProvider({ children }) {
     return Array.isArray(data) ? data[0] : data;
   }, [rpc]);
 
+  // Aggiorna le preferenze sportive dell'utente (array di sport).
+  const updatePreferences = useCallback(async (prefs) => {
+    if (!supabase || !session?.user) throw new Error('Devi essere loggato');
+    const { error } = await supabase
+      .from('profiles')
+      .update({ preferences: prefs })
+      .eq('id', session.user.id);
+    if (error) throw error;
+    await refreshProfile();
+  }, [session, refreshProfile]);
+
   // Badge e streak del profilo.
   const myProfileStats = useCallback(async () => {
     if (!supabase) return null;
@@ -596,6 +607,7 @@ export function AppProvider({ children }) {
     seasonChallenge,
     adminCloseMonth,
     adminCloseSeason,
+    updatePreferences,
     listLeadCampaigns,
     submitLead,
     getPublicProfile,

@@ -19,6 +19,10 @@ import Schedine from './screens/Schedine.jsx';
 import Archivio from './screens/Archivio.jsx';
 import Amici from './screens/Amici.jsx';
 import ResetPassword from './screens/ResetPassword.jsx';
+import Sicurezza from './screens/Sicurezza.jsx';
+import Preferenze from './screens/Preferenze.jsx';
+import NotificheSettings from './screens/NotificheSettings.jsx';
+import Faq from './screens/Faq.jsx';
 
 function Protected({ children }) {
   const { isAuthed, isSupabaseConfigured, loadingAuth } = useApp();
@@ -50,6 +54,10 @@ export default function App() {
           <Route path="/schedine"        element={<Protected><Schedine /></Protected>} />
           <Route path="/archivio"        element={<Protected><Archivio /></Protected>} />
           <Route path="/amici"           element={<Protected><Amici /></Protected>} />
+          <Route path="/sicurezza"       element={<Protected><Sicurezza /></Protected>} />
+          <Route path="/preferenze"      element={<Protected><Preferenze /></Protected>} />
+          <Route path="/impostazioni-notifiche" element={<Protected><NotificheSettings /></Protected>} />
+          <Route path="/faq"             element={<Protected><Faq /></Protected>} />
           <Route path="/classifiche"     element={<Protected><Classifiche /></Protected>} />
           <Route path="/premi"           element={<Protected><Premi /></Protected>} />
           <Route path="/gruppi"          element={<Protected><Gruppi /></Protected>} />

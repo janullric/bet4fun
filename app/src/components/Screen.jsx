@@ -1,7 +1,10 @@
 import Icon from './Icon.jsx';
+import NotificationsBell from './NotificationsBell.jsx';
 
 // Layout base di una schermata: header con titolo e area contenuti.
 // Il container esterno non ha più altezza fissa: sul web lascia scorrere la pagina.
+// La campanella notifiche è SEMPRE presente nell'header (su ogni pagina);
+// `headerRight` aggiunge eventuali pulsanti extra accanto ad essa.
 export default function Screen({
   title,
   subtitle,
@@ -9,6 +12,7 @@ export default function Screen({
   headerRight,
   onBack,
   hero,
+  hideBell = false,
 }) {
   return (
     <div
@@ -67,7 +71,10 @@ export default function Screen({
               </div>
             )}
           </div>
-          {headerRight}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {headerRight}
+            {!hideBell && <NotificationsBell />}
+          </div>
         </div>
       )}
       {hero}

@@ -248,8 +248,8 @@ export default function Classifiche() {
           </div>
         )}
 
-        {data.map((p) => (
-          <LeaderRow key={p.n} {...p} />
+        {data.map((p, i) => (
+          <LeaderRow key={`${p.nick}-${i}`} {...p} />
         ))}
 
         {isSupabaseConfigured && data.length === 0 && (

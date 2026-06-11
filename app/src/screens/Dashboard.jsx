@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Screen from '../components/Screen.jsx';
 import Icon from '../components/Icon.jsx';
@@ -7,8 +7,8 @@ import SectionHeader from '../components/SectionHeader.jsx';
 import LeaderRow from '../components/LeaderRow.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { CONTESTS } from '../lib/contests.js';
-import { useUpcomingForLeagues, useCurrentRoundsForLeagues } from '../hooks/useEvents.js';
-import { formatMatchDate, formatCountdown } from '../lib/format.js';
+import { useUpcomingForLeagues } from '../hooks/useEvents.js';
+import { formatMatchDate } from '../lib/format.js';
 
 // Demo mostrata SOLO quando Supabase non è configurato (repo in anteprima).
 const DEMO_LEADERS = [
@@ -76,31 +76,6 @@ export default function Dashboard() {
 
   const openBets = useMemo(() => bets.filter((b) => b.editable), [bets]);
 
-  // Promemoria: concorsi giocabili che chiudono entro 48h e che l'utente
-  // NON ha ancora pronosticato → notifica "⏰ gioca prima del kickoff".
-  const { data: roundsMeta } = useCurrentRoundsForLeagues(leagueIds);
-  const reminders = useMemo(() => {
-    const out = [];
-    const now = Date.now();
-    (roundsMeta || []).forEach((r) => {
-      const meta = r?.meta;
-      if (!r?.leagueId || !meta?.round || !(meta.count > 0) || !meta.firstKickISO) return;
-      const kick = new Date(meta.firstKickISO).getTime();
-      const msLeft = kick - 60 * 1000 - now;
-      if (msLeft <= 0 || msLeft > 48 * 3600 * 1000) return;          // chiude entro 48h
-      const played = bets.some(
-        (b) => String(b.league_id) === String(r.leagueId) && Number(b.round) === Number(meta.round)
-      );
-      if (played) return;
-      const contest = CONTESTS.find((c) => String(c.league.id) === String(r.leagueId));
-      if (!contest) return;
-      out.push({ contest, round: meta.round, kickISO: meta.firstKickISO, msLeft });
-    });
-    out.sort((a, b) => a.msLeft - b.msLeft);
-    return out.slice(0, 4);
-  }, [roundsMeta, bets]);
-
-  const hasNotifications = reminders.length > 0 || openBets.length > 0 || bets.length > 0;
   const upcoming = useMemo(() => {
     const seen = new Set();
     const unique = (events || []).filter((e) =>
@@ -122,15 +97,6 @@ export default function Dashboard() {
         </span>
       }
       subtitle="Ecco il riepilogo del tuo mese."
-      headerRight={
-        <NotificationsBell
-          bets={bets}
-          openBets={openBets}
-          reminders={reminders}
-          hasNotifications={hasNotifications}
-          onNavigate={navigate}
-        />
-      }
     >
       {/* card saldo */}
       <div style={{ padding: '0 22px 20px' }}>
@@ -463,258 +429,6 @@ export default function Dashboard() {
         ))}
       </div>
     </Screen>
-  );
-}
-
-function NotificationsBell({ bets, openBets, reminders = [], hasNotifications, onNavigate }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDocClick = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [open]);
-
-  const recent = (bets || []).slice(0, 3);
-
-  const go = (path) => {
-    setOpen(false);
-    onNavigate(path);
-  };
-
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <button
-        aria-label="Notifiche"
-        onClick={() => setOpen((v) => !v)}
-        style={{
-          background: 'rgba(255,255,255,0.06)',
-          border: 0,
-          color: '#F5F6FA',
-          width: 40,
-          height: 40,
-          borderRadius: 14,
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          position: 'relative',
-        }}
-      >
-        <Icon name="bell" size={20} />
-        {hasNotifications && (
-          <span
-            style={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              width: 8,
-              height: 8,
-              borderRadius: 4,
-              background: '#FF5A6A',
-            }}
-          />
-        )}
-      </button>
-
-      {open && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 48,
-            right: 0,
-            width: 280,
-            background: '#111830',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 16,
-            boxShadow: '0 18px 40px rgba(0,0,0,0.4)',
-            padding: 12,
-            zIndex: 20,
-            fontFamily: 'Inter',
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontFamily: 'JetBrains Mono',
-              color: 'rgba(245,246,250,0.5)',
-              textTransform: 'uppercase',
-              letterSpacing: 1,
-              padding: '2px 4px 8px',
-            }}
-          >
-            Notifiche
-          </div>
-
-          {reminders.map((r, i) => (
-            <button
-              key={`rem-${i}`}
-              onClick={() => go(`/pronostici/${r.contest.key}`)}
-              style={{
-                width: '100%',
-                textAlign: 'left',
-                background: 'rgba(255,90,106,0.10)',
-                border: '1px solid rgba(255,90,106,0.3)',
-                color: '#F5F6FA',
-                borderRadius: 12,
-                padding: '10px 12px',
-                marginBottom: 8,
-                cursor: 'pointer',
-                fontFamily: 'Inter',
-              }}
-            >
-              <div style={{ fontSize: 13, fontWeight: 700 }}>
-                ⏰ {r.contest.league.label} chiude tra {formatCountdown(r.kickISO)}
-              </div>
-              <div style={{ fontSize: 11, color: 'rgba(245,246,250,0.65)', marginTop: 2 }}>
-                Non hai ancora giocato — pronostica ora →
-              </div>
-            </button>
-          ))}
-
-          {openBets.length > 0 && (
-            <button
-              onClick={() => go('/schedine')}
-              style={{
-                width: '100%',
-                textAlign: 'left',
-                background: 'rgba(34,197,94,0.10)',
-                border: '1px solid rgba(34,197,94,0.25)',
-                color: '#F5F6FA',
-                borderRadius: 12,
-                padding: '10px 12px',
-                marginBottom: 8,
-                cursor: 'pointer',
-                fontFamily: 'Inter',
-              }}
-            >
-              <div style={{ fontSize: 13, fontWeight: 700 }}>
-                {openBets.length} schedine aperte
-              </div>
-              <div style={{ fontSize: 11, color: 'rgba(245,246,250,0.65)', marginTop: 2 }}>
-                Puoi ancora modificarle prima del kickoff · Gestisci →
-              </div>
-            </button>
-          )}
-
-          {recent.length > 0 && (
-            <div
-              style={{
-                fontSize: 10,
-                fontFamily: 'JetBrains Mono',
-                color: 'rgba(245,246,250,0.45)',
-                textTransform: 'uppercase',
-                letterSpacing: 1,
-                padding: '6px 4px 4px',
-              }}
-            >
-              Ultime giocate
-            </div>
-          )}
-
-          {recent.map((b) => {
-            const c = CONTESTS.find((x) => String(x.league.id) === String(b.league_id));
-            const leagueLabel = c?.league.label || b.league_id;
-            const countdown = b.editable && b.first_kickoff_at
-              ? formatCountdown(b.first_kickoff_at)
-              : null;
-            return (
-              <button
-                key={b.bet_id}
-                onClick={() => go('/schedine')}
-                style={{
-                  width: '100%',
-                  textAlign: 'left',
-                  background: 'rgba(255,255,255,0.04)',
-                  border: 0,
-                  color: '#F5F6FA',
-                  borderRadius: 10,
-                  padding: '8px 10px',
-                  marginBottom: 6,
-                  cursor: 'pointer',
-                  fontFamily: 'Inter',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                }}
-              >
-                <div
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: 4,
-                    background: b.editable ? '#22c55e' : 'rgba(255,90,106,0.8)',
-                    flexShrink: 0,
-                  }}
-                />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {leagueLabel}
-                  </div>
-                  <div style={{ fontSize: 10, color: 'rgba(245,246,250,0.55)' }}>
-                    {b.editable
-                      ? (countdown ? `Inizia tra ${countdown}` : 'Aperta')
-                      : 'Chiusa'}
-                  </div>
-                </div>
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontFamily: 'JetBrains Mono',
-                    color: b.editable ? '#22c55e' : '#FF5A6A',
-                  }}
-                >
-                  +{b.funnies_awarded}
-                </span>
-              </button>
-            );
-          })}
-
-          {!hasNotifications && (
-            <div
-              style={{
-                padding: '10px 4px',
-                color: 'rgba(245,246,250,0.55)',
-                fontSize: 12,
-              }}
-            >
-              Nessuna notifica per ora. Gioca una schedina per iniziare.
-            </div>
-          )}
-
-          <button
-            onClick={() => go('/schedine')}
-            style={{
-              marginTop: 8,
-              width: '100%',
-              background: '#FFDD2E',
-              color: '#0A0F1F',
-              border: 0,
-              borderRadius: 10,
-              padding: '9px 12px',
-              fontFamily: 'Space Grotesk',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-            }}
-          >
-            Apri tutte le schedine
-          </button>
-        </div>
-      )}
-    </div>
   );
 }
 

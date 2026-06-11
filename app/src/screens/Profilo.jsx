@@ -76,10 +76,10 @@ export default function Profilo() {
   };
 
   const settingsRows = [
-    { label: 'Preferenze sportive', icon: 'bolt' },
-    { label: 'Notifiche',           icon: 'bell' },
-    { label: 'Privacy e sicurezza', icon: 'lock' },
-    { label: 'Aiuto e FAQ',         icon: 'mail' },
+    { label: 'Preferenze sportive', icon: 'bolt', action: () => navigate('/preferenze') },
+    { label: 'Notifiche',           icon: 'bell', action: () => navigate('/impostazioni-notifiche') },
+    { label: 'Privacy e sicurezza', icon: 'lock', action: () => navigate('/sicurezza') },
+    { label: 'Aiuto e FAQ',         icon: 'mail', action: () => navigate('/faq') },
     ...(profile?.is_admin
       ? [{ label: 'Pannello admin', icon: 'shield', action: () => navigate('/admin') }]
       : []),

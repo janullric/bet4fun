@@ -92,6 +92,20 @@ export default function Iscrizione() {
     }
 
     if (step === 0 && isSupabaseConfigured) {
+      // Validazione email: formato corretto + dominio plausibile. Primo
+      // filtro anti-email-finta (la verifica vera si attiva col "Confirm
+      // email" lato Supabase). Blocca i domini usa-e-getta più comuni.
+      const email = data.email.trim().toLowerCase();
+      const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+      const dispose = ['mailinator.com', 'tempmail', '10minutemail', 'guerrillamail', 'yopmail', 'trashmail', 'sharklasers', 'getnada', 'temp-mail'];
+      if (!emailOk) {
+        setError('Inserisci un indirizzo email valido (es. nome@dominio.it).');
+        return;
+      }
+      if (dispose.some((d) => email.includes(d))) {
+        setError('Usa un\'email reale: le email usa-e-getta non sono ammesse.');
+        return;
+      }
       // Verifica subito che il nickname sia libero: meglio scoprirlo qui
       // che con un errore criptico alla fine del wizard.
       setSubmitting(true);
