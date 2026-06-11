@@ -35,17 +35,19 @@ const DEMO = {
 const TABS = [
   { id: 'generale', label: 'Generale' },
   { id: 'mensile',  label: 'Mensile' },
-  { id: 'amici',    label: 'Amici' },
+  { id: 'stagione', label: 'Stagione' },
 ];
 
 export default function Classifiche() {
   const [tab, setTab] = useState('generale');
   const {
-    globalLeaderboard, isSupabaseConfigured, monthlyChallenge,
+    globalLeaderboard, isSupabaseConfigured, monthlyChallenge, seasonChallenge,
     myRank: fetchMyRank, funnies, user,
   } = useApp();
   const [live, setLive] = useState(null);
   const [monthly, setMonthly] = useState(null);
+  const [monthlyPool, setMonthlyPool] = useState(null);
+  const [season, setSeason] = useState(null);
   const [myRank, setMyRank] = useState(null);
   const [rankInfo, setRankInfo] = useState(null);
 
@@ -74,7 +76,9 @@ export default function Classifiche() {
     // Classifica mensile reale dalla sfida del mese.
     monthlyChallenge()
       .then((c) => {
-        if (!alive || !c || !Array.isArray(c.leaderboard)) return;
+        if (!alive || !c) return;
+        setMonthlyPool(Number(c.prize_pool) || null);
+        if (!Array.isArray(c.leaderboard)) return;
         setMonthly(c.leaderboard.map((r, i) => ({
           n: r.rank ?? i + 1,
           nick: r.nick,
@@ -85,18 +89,32 @@ export default function Classifiche() {
         })));
       })
       .catch(() => {});
+    // Classifica stagionale (annuale) col suo montepremi.
+    seasonChallenge()
+      .then((s) => { if (alive) setSeason(s); })
+      .catch(() => {});
     return () => { alive = false; };
   }, [isSupabaseConfigured, globalLeaderboard, monthlyChallenge, fetchMyRank]);
 
   // Con Supabase configurato mostriamo SOLO dati reali (anche se vuoti);
   // la demo resta per chi naviga il repo senza backend.
+  const seasonRows = Array.isArray(season?.leaderboard)
+    ? season.leaderboard.map((r, i) => ({
+        n: r.rank ?? i + 1,
+        nick: r.nick,
+        pts: Number(r.points ?? 0),
+        funnies: Number(r.points ?? 0),
+        delta: 0,
+        me: !!r.is_me,
+      }))
+    : [];
   const data = !isSupabaseConfigured
-    ? DEMO[tab]
+    ? (DEMO[tab] || [])
     : tab === 'generale'
       ? (live || [])
       : tab === 'mensile'
         ? (monthly || [])
-        : []; // amici → si gioca nei Gruppi
+        : seasonRows;
 
   const effRank = rankInfo?.rank ?? myRank;
 
@@ -204,32 +222,41 @@ export default function Classifiche() {
       </div>
 
       <div style={{ padding: '0 22px 30px' }}>
+        {/* Montepremi dedicato + scadenza per mensile e stagione. */}
+        {isSupabaseConfigured && tab !== 'generale' && (
+          <div
+            style={{
+              background: 'rgba(255,221,46,0.06)',
+              border: '1px solid rgba(255,221,46,0.2)',
+              borderRadius: 14,
+              padding: '10px 14px',
+              marginBottom: 12,
+              fontSize: 12,
+              color: 'rgba(245,246,250,0.8)',
+              lineHeight: 1.5,
+            }}
+          >
+            {tab === 'mensile' ? (
+              <>🏆 Montepremi del mese: <strong style={{ color: '#FFDD2E' }}>
+                {monthlyPool != null ? monthlyPool.toLocaleString('it-IT') : '…'}</strong> Funnies
+                · si chiude a fine mese (punti dalle giornate del mese)</>
+            ) : (
+              <>🏆 Montepremi stagione {season?.year ?? new Date().getFullYear()}: <strong style={{ color: '#FFDD2E' }}>
+                {season ? Number(season.prize_pool).toLocaleString('it-IT') : '…'}</strong> Funnies
+                · si chiude il 31/12/{season?.year ?? new Date().getFullYear()}</>
+            )}
+          </div>
+        )}
+
         {data.map((p) => (
           <LeaderRow key={p.n} {...p} />
         ))}
 
-        {isSupabaseConfigured && tab !== 'amici' && data.length === 0 && (
+        {isSupabaseConfigured && data.length === 0 && (
           <div style={{ color: 'rgba(245,246,250,0.5)', fontSize: 13, padding: '8px 0' }}>
-            {tab === 'mensile'
-              ? 'Ancora nessun partecipante questo mese: gioca una schedina!'
-              : 'Ancora nessun giocatore in classifica.'}
-          </div>
-        )}
-
-        {isSupabaseConfigured && tab === 'amici' && (
-          <div
-            style={{
-              background: '#111830',
-              border: '1px solid rgba(255,255,255,0.04)',
-              borderRadius: 18,
-              padding: 18,
-              fontSize: 13,
-              color: 'rgba(245,246,250,0.75)',
-              lineHeight: 1.5,
-            }}
-          >
-            Le classifiche con gli amici vivono nei <strong>Gruppi</strong>: creane
-            uno e condividi il codice invito dalla sezione Gruppi del menu.
+            {tab === 'generale'
+              ? 'Ancora nessun giocatore in classifica.'
+              : 'Ancora nessun punto in classifica: si sale giocando le giornate (i punti arrivano alla chiusura).'}
           </div>
         )}
 

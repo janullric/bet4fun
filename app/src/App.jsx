@@ -17,6 +17,7 @@ import SfidaMese from './screens/SfidaMese.jsx';
 import Admin from './screens/Admin.jsx';
 import Schedine from './screens/Schedine.jsx';
 import Archivio from './screens/Archivio.jsx';
+import Amici from './screens/Amici.jsx';
 
 function Protected({ children }) {
   const { isAuthed, isSupabaseConfigured, loadingAuth } = useApp();
@@ -42,6 +43,7 @@ export default function App() {
           <Route path="/pronostici/:id"  element={<Protected><Schedina /></Protected>} />
           <Route path="/schedine"        element={<Protected><Schedine /></Protected>} />
           <Route path="/archivio"        element={<Protected><Archivio /></Protected>} />
+          <Route path="/amici"           element={<Protected><Amici /></Protected>} />
           <Route path="/classifiche"     element={<Protected><Classifiche /></Protected>} />
           <Route path="/premi"           element={<Protected><Premi /></Protected>} />
           <Route path="/gruppi"          element={<Protected><Gruppi /></Protected>} />

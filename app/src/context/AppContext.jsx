@@ -227,6 +227,42 @@ export function AppProvider({ children }) {
     return data || [];
   }, []);
 
+  // ── Amici, messaggi privati, sfide 1v1 ──────────────────────────────
+  const rpc = useCallback(async (name, args = {}, fallback = []) => {
+    if (!supabase) return fallback;
+    const { data, error } = await supabase.rpc(name, args);
+    if (error) throw error;
+    return data ?? fallback;
+  }, []);
+
+  const sendFriendRequest   = useCallback((nick) => rpc('send_friend_request', { p_nick: nick }, null), [rpc]);
+  const respondFriendRequest = useCallback((id, accept) => rpc('respond_friend_request', { p_id: Number(id), p_accept: !!accept }, null), [rpc]);
+  const listFriends         = useCallback(() => rpc('list_friends'), [rpc]);
+  const sendDm              = useCallback((to, body) => rpc('send_dm', { p_to: to, p_body: body }, null), [rpc]);
+  const listDm              = useCallback((friendId) => rpc('list_dm', { p_friend: friendId }), [rpc]);
+  const myUnreadDm          = useCallback(() => rpc('my_unread_dm').catch(() => []), [rpc]);
+  const createDuel          = useCallback(({ nick, leagueId, round, stake }) =>
+    rpc('create_duel', { p_nick: nick, p_league_id: String(leagueId), p_round: Number(round), p_stake: Number(stake) }, null), [rpc]);
+  const respondDuel         = useCallback((id, accept) => rpc('respond_duel', { p_id: Number(id), p_accept: !!accept }, null), [rpc]);
+  const listMyDuels         = useCallback(() => rpc('list_my_duels'), [rpc]);
+
+  // Classifica stagionale (annuale) con montepremi dedicato.
+  const seasonChallenge = useCallback(async () => {
+    const data = await rpc('season_challenge_state').catch(() => null);
+    if (!data) return null;
+    return Array.isArray(data) ? data[0] : data;
+  }, [rpc]);
+
+  const adminCloseMonth = useCallback(async ({ year, month }) => {
+    const data = await rpc('admin_close_month', { p_year: Number(year), p_month: Number(month) });
+    return Array.isArray(data) ? data[0] : data;
+  }, [rpc]);
+
+  const adminCloseSeason = useCallback(async ({ year }) => {
+    const data = await rpc('admin_close_season', { p_year: Number(year) });
+    return Array.isArray(data) ? data[0] : data;
+  }, [rpc]);
+
   // Badge e streak del profilo.
   const myProfileStats = useCallback(async () => {
     if (!supabase) return null;
@@ -525,6 +561,18 @@ export function AppProvider({ children }) {
     listGroupComments,
     listSettledRounds,
     myProfileStats,
+    sendFriendRequest,
+    respondFriendRequest,
+    listFriends,
+    sendDm,
+    listDm,
+    myUnreadDm,
+    createDuel,
+    respondDuel,
+    listMyDuels,
+    seasonChallenge,
+    adminCloseMonth,
+    adminCloseSeason,
     listLeadCampaigns,
     submitLead,
     getPublicProfile,

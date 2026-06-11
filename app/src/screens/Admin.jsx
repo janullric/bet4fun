@@ -14,7 +14,7 @@ export default function Admin() {
   const {
     isAdmin, isAuthed, isSupabaseConfigured,
     adminSetMatchResult, adminSettleRound, adminDistributeRound, adminSetRoundPot,
-    adminCloseRound,
+    adminCloseRound, adminCloseMonth, adminCloseSeason,
     adminListLeadCampaigns, adminUpsertLeadCampaign,
     adminToggleLeadCampaign, adminDeleteLeadCampaign,
     adminListFixtures, adminUpsertFixture, adminDeleteFixture,
@@ -80,6 +80,11 @@ export default function Admin() {
       <SectionHeader title="Chiudi giornata (auto)" />
       <div style={{ padding: '0 22px 20px' }}>
         <CloseRoundForm onClose={adminCloseRound} />
+      </div>
+
+      <SectionHeader title="Montepremi mensile e stagionale" />
+      <div style={{ padding: '0 22px 20px' }}>
+        <ClosePeriodForms onCloseMonth={adminCloseMonth} onCloseSeason={adminCloseSeason} />
       </div>
 
       <SectionHeader title="Risultato ufficiale" />
@@ -294,6 +299,57 @@ function CloseRoundForm({ onClose }) {
           {Number(result.total_paid).toLocaleString('it-IT')} Funnies pagati.
         </div>
       )}
+    </div>
+  );
+}
+
+// Chiusura del montepremi mensile (a fine mese) e stagionale (31/12).
+// Entrambe pagano UNA volta sola: il server rifiuta i doppi pagamenti.
+function ClosePeriodForms({ onCloseMonth, onCloseSeason }) {
+  const now = new Date();
+  const [year, setYear] = useState(String(now.getFullYear()));
+  const [month, setMonth] = useState(String(now.getMonth() + 1));
+  const [busy, setBusy] = useState(false);
+  const [out, setOut] = useState(null);
+  const [error, setError] = useState(null);
+
+  const run = async (fn, label) => {
+    if (!window.confirm(`${label}: distribuire il montepremi? L'operazione è una tantum.`)) return;
+    setBusy(true); setOut(null); setError(null);
+    try {
+      const r = await fn();
+      setOut(`${label} ✓ — ${r?.participants ?? 0} premiati, ${Number(r?.prize_pool ?? 0).toLocaleString('it-IT')} Funnies distribuiti.`);
+    } catch (e) {
+      setError(e?.message || 'Errore.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={formGrid}>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <Field label="Anno"><input value={year} onChange={(e) => setYear(e.target.value)} type="number" style={input} /></Field>
+        <Field label="Mese (1-12)"><input value={month} onChange={(e) => setMonth(e.target.value)} type="number" min={1} max={12} style={input} /></Field>
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button
+          type="button" disabled={busy}
+          onClick={() => run(() => onCloseMonth({ year, month }), `Chiusura mese ${month}/${year}`)}
+          style={submitBtn}
+        >
+          Chiudi e paga il MESE
+        </button>
+        <button
+          type="button" disabled={busy}
+          onClick={() => run(() => onCloseSeason({ year }), `Chiusura stagione ${year}`)}
+          style={{ ...submitBtn, background: '#3DDC97' }}
+        >
+          Chiudi e paga la STAGIONE
+        </button>
+      </div>
+      {out && <div style={{ color: '#3DDC97', fontSize: 13 }}>{out}</div>}
+      {error && <div style={{ color: '#FF5A6A', fontSize: 13 }}>{error}</div>}
     </div>
   );
 }

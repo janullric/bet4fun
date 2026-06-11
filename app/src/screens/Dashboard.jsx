@@ -231,10 +231,10 @@ export default function Dashboard() {
           }
         />
         <QuickAction
-          onClick={() => navigate('/boost')}
-          icon="sparkle"
-          label="Lead Boost"
-          sub="Funnies extra dai brand"
+          onClick={() => navigate('/amici')}
+          icon="users"
+          label="Amici"
+          sub="Chat e sfide 1v1"
         />
         <QuickAction
           onClick={() => navigate('/gruppi')}
